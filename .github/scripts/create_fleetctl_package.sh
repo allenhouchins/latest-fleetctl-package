@@ -26,7 +26,7 @@ fi
 if ! command -v brew &> /dev/null; then
     echo "Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    brew install git
+    brew install git jq
 fi
 
 # Add required AutoPkg repos
@@ -60,7 +60,9 @@ if [ -f $(ls $ZIP_FILE) ]; then
     echo "Extracting CHANGELOG.md from zip..."
     unzip -p $(ls $ZIP_FILE) "*/CHANGELOG.md" > /tmp/CHANGELOG.md
     if [ -f /tmp/CHANGELOG.md ]; then
-        CHANGELOG_CONTENT=$(cat /tmp/CHANGELOG.md)
+        # Escape the changelog content for JSON
+        CHANGELOG_CONTENT=$(cat /tmp/CHANGELOG.md | jq -Rs .)
+        CHANGELOG_CONTENT=${CHANGELOG_CONTENT:1:-1} # Remove surrounding quotes
     else
         echo "CHANGELOG.md not found in zip file"
         CHANGELOG_CONTENT="No changelog available"
@@ -78,34 +80,40 @@ echo "Creating GitHub release..."
 PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
 RELEASE_TAG="${FLEET_VERSION}"
 
-# Create JSON payload file for the release
-cat > release.json << EOF
-{
-  "tag_name": "${RELEASE_TAG}",
-  "target_commitish": "main",
-  "name": "${PACKAGE_NAME}",
-  "body": "Package SHA256: ${PACKAGE_SHA256}\\n\\n${CHANGELOG_CONTENT}",
-  "draft": false,
-  "prerelease": false,
-  "generate_release_notes": false
-}
-EOF
+# Create release data
+RELEASE_DATA=$(jq -n \
+    --arg tag "${RELEASE_TAG}" \
+    --arg name "${PACKAGE_NAME}" \
+    --arg sha "${PACKAGE_SHA256}" \
+    --arg changelog "${CHANGELOG_CONTENT}" \
+    '{
+        tag_name: $tag,
+        target_commitish: "main",
+        name: $name,
+        body: "Package SHA256: " + $sha + "\n\n" + $changelog,
+        draft: false,
+        prerelease: false,
+        generate_release_notes: false
+    }')
 
-# Create the release using the JSON file
+echo "Creating release with data:"
+echo "${RELEASE_DATA}" | jq .
+
+# Create the release
 RELEASE_RESPONSE=$(curl -L \
-  -X POST \
-  -H "Accept: application/vnd.github+json" \
-  -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
-  -H "X-GitHub-Api-Version: 2022-11-28" \
-  "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases" \
-  -d @release.json)
+    -X POST \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases" \
+    -d "${RELEASE_DATA}")
 
 # Get the release ID from the response
 RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | jq -r '.id')
 
 if [ -z "${RELEASE_ID}" ] || [ "${RELEASE_ID}" = "null" ]; then
     echo "Failed to create release. Response:"
-    echo "${RELEASE_RESPONSE}"
+    echo "${RELEASE_RESPONSE}" | jq .
     exit 1
 fi
 
@@ -114,13 +122,13 @@ echo "Created release with ID: ${RELEASE_ID}"
 # Upload the package file
 echo "Uploading package to release..."
 UPLOAD_RESPONSE=$(curl -L \
-  -X POST \
-  -H "Accept: application/vnd.github+json" \
-  -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
-  -H "X-GitHub-Api-Version: 2022-11-28" \
-  -H "Content-Type: application/octet-stream" \
-  "https://uploads.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets?name=${PACKAGE_NAME}" \
-  --data-binary "@${PACKAGE_FILE}")
+    -X POST \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    -H "Content-Type: application/octet-stream" \
+    "https://uploads.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets?name=${PACKAGE_NAME}" \
+    --data-binary "@${PACKAGE_FILE}")
 
 UPLOAD_STATUS=$?
 if [ $UPLOAD_STATUS -ne 0 ]; then
@@ -132,5 +140,5 @@ fi
 echo "Successfully uploaded package to release"
 
 # Clean up
-rm -f release.json /tmp/CHANGELOG.md
+rm -f /tmp/CHANGELOG.md
 defaults delete com.github.autopkg GITHUB_TOKEN
