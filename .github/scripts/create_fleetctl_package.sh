@@ -53,41 +53,63 @@ fi
 
 echo "Found package at: $PACKAGE_FILE"
 
-# Check package size for Git LFS
-PKGSIZE=$(stat -f%z "${PACKAGE_FILE}")
-if [ "$PKGSIZE" -gt "104857600" ]; then
-    echo "Installing git-lfs"
-    brew install git-lfs
-    export add_git_lfs="git lfs install; git lfs track *.pkg; git add .gitattributes"
-else
-    export add_git_lfs="echo 'git lfs not needed. Continuing...'"
+# Calculate package checksum
+PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
+
+# Create GitHub release
+echo "Creating GitHub release..."
+RELEASE_TAG="${FLEET_VERSION}"
+RELEASE_NAME="Fleet ${FLEET_VERSION} Package"
+RELEASE_BODY="Fleet package version ${FLEET_VERSION}
+
+Package SHA256: ${PACKAGE_SHA256}"
+
+# Create the release
+RELEASE_RESPONSE=$(curl -L \
+  -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases" \
+  -d "{
+    \"tag_name\":\"${RELEASE_TAG}\",
+    \"target_commitish\":\"main\",
+    \"name\":\"${RELEASE_NAME}\",
+    \"body\":\"${RELEASE_BODY}\",
+    \"draft\":false,
+    \"prerelease\":false,
+    \"generate_release_notes\":false
+  }")
+
+# Get the release ID from the response
+RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | jq -r '.id')
+
+if [ -z "${RELEASE_ID}" ] || [ "${RELEASE_ID}" = "null" ]; then
+    echo "Failed to create release. Response:"
+    echo "${RELEASE_RESPONSE}"
+    exit 1
 fi
 
-# Configure git
-git config --global user.email "$USER_EMAIL"
-git config --global user.name "$USER_NAME"
+echo "Created release with ID: ${RELEASE_ID}"
 
-# Clone repo and add package
-echo "Cloning repository with token..."
-git clone "https://$PACKAGE_AUTOMATION_TOKEN@github.com/$REPO_OWNER/$REPO_NAME.git" /tmp/repo || {
-    echo "Failed to clone repository"
+# Upload the package file
+echo "Uploading package to release..."
+PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
+curl -L \
+  -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  -H "Content-Type: application/octet-stream" \
+  "https://uploads.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets?name=${PACKAGE_NAME}" \
+  --data-binary "@${PACKAGE_FILE}"
+
+if [ $? -ne 0 ]; then
+    echo "Failed to upload package to release"
     exit 1
-}
+fi
 
-cp "${PACKAGE_FILE}" /tmp/repo
-cd /tmp/repo
-eval "$add_git_lfs"
+echo "Successfully uploaded package to release"
 
-# Commit and push
-git add $(basename "$PACKAGE_FILE")
-git commit -m "Add Fleet package version ${FLEET_VERSION}"
-echo "Pushing to repository..."
-git push origin HEAD:main || {
-    echo "Failed to push to repository"
-    exit 1
-}
-
-# Cleanup
-rm -rf /tmp/repo
 # Clean up the GitHub token
 defaults delete com.github.autopkg GITHUB_TOKEN
