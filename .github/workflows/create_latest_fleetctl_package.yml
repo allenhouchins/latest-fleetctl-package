@@ -1,0 +1,83 @@
+name: Create latest fleetctl package
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Run every 6 hours
+  workflow_dispatch:        # Allow manual triggers
+
+permissions:
+  contents: write          # Add explicit permission to write to repo
+
+jobs:
+  check-fleet-release:
+    runs-on: ubuntu-latest
+    outputs:
+      new_release: ${{ steps.check_release.outputs.new_release }}
+      version: ${{ steps.check_release.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PACKAGE_AUTOMATION_TOKEN }}
+          fetch-depth: 0
+
+      - name: Check latest Fleet release
+        id: check_release
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/fleetdm/fleet/releases/latest | jq -r .tag_name)
+          
+          # Create version file if it doesn't exist
+          if [ ! -f "current_fleetctl_version.txt" ]; then
+            echo "none" > current_fleetctl_version.txt
+          fi
+          
+          CURRENT=$(cat current_fleetctl_version.txt)
+          
+          if [ "$LATEST" != "$CURRENT" ]; then
+            echo "new_release=true" >> $GITHUB_OUTPUT
+            echo "version=${LATEST}" >> $GITHUB_OUTPUT
+          else
+            echo "new_release=false" >> $GITHUB_OUTPUT
+          fi
+
+  create-package:
+    needs: check-fleet-release
+    if: needs.check-fleet-release.outputs.new_release == 'true'
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PACKAGE_AUTOMATION_TOKEN }}
+          fetch-depth: 0
+
+      - name: Create Fleet package
+        run: |
+          chmod +x ./.github/scripts/create_fleetctl_package.sh
+          ./.github/scripts/create_fleetctl_package.sh
+        env:
+          FLEET_VERSION: ${{ needs.check-fleet-release.outputs.version }}
+          PACKAGE_AUTOMATION_TOKEN: ${{ secrets.PACKAGE_AUTOMATION_TOKEN }}
+          REPO_OWNER: ${{ secrets.REPO_OWNER }}
+          REPO_NAME: ${{ secrets.REPO_NAME }}
+          USER_EMAIL: ${{ secrets.USER_EMAIL }}
+          USER_NAME: ${{ secrets.USER_NAME }}
+
+      - name: Update version file
+        if: success()
+        run: |
+          # Ensure we're on the latest version of main
+          git fetch origin main
+          git reset --hard origin/main
+          
+          # Update version file
+          echo "${{ needs.check-fleet-release.outputs.version }}" > current_fleetctl_version.txt
+          
+          # Configure git
+          git config user.name "${{ secrets.USER_NAME }}"
+          git config user.email "${{ secrets.USER_EMAIL }}"
+          
+          # Commit and push changes
+          git add current_fleetctl_version.txt
+          git commit -m "Update Fleet version to ${{ needs.check-fleet-release.outputs.version }}"
+          git push origin HEAD:main
