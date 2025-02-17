@@ -53,32 +53,6 @@ fi
 
 echo "Found package at: $PACKAGE_FILE"
 
-# Extract README.md from the downloaded zip
-ZIP_FILE="/Users/runner/Library/AutoPkg/Cache/github.fleetdm.fleetctl.pkg.recipe/downloads/fleetctl_v*_macos.zip"
-README_CONTENT=""
-if [ -f $(ls $ZIP_FILE) ]; then
-    echo "Extracting README.md from zip..."
-    unzip -p $(ls $ZIP_FILE) "*/README.md" > /tmp/README.md
-    if [ -f /tmp/README.md ]; then
-        # Preserve markdown formatting by using Python to properly escape the content
-        README_CONTENT=$(python3 -c '
-import json
-import sys
-
-with open("/tmp/README.md", "r") as f:
-    content = f.read()
-print(json.dumps(content))
-        ')
-        README_CONTENT=${README_CONTENT:1:-1} # Remove surrounding quotes
-    else
-        echo "README.md not found in zip file"
-        README_CONTENT="No readme available"
-    fi
-else
-    echo "Zip file not found"
-    README_CONTENT="No readme available"
-fi
-
 # Calculate package checksum
 PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
 
@@ -87,21 +61,16 @@ echo "Creating GitHub release..."
 PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
 RELEASE_TAG="${FLEET_VERSION}"
 
-# Create the release body
-RELEASE_BODY="Package SHA256: ${PACKAGE_SHA256}
-
-${README_CONTENT}"
-
 # Create release data
 RELEASE_DATA=$(jq -n \
     --arg tag "${RELEASE_TAG}" \
     --arg name "${PACKAGE_NAME}" \
-    --arg body "${RELEASE_BODY}" \
+    --arg sha "${PACKAGE_SHA256}" \
     '{
         tag_name: $tag,
         target_commitish: "main",
         name: $name,
-        body: $body,
+        body: "Package SHA256: " + $sha,
         draft: false,
         prerelease: false,
         generate_release_notes: false
@@ -151,5 +120,4 @@ fi
 echo "Successfully uploaded package to release"
 
 # Clean up
-rm -f /tmp/README.md
 defaults delete com.github.autopkg GITHUB_TOKEN
