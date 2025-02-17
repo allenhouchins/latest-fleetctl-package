@@ -53,23 +53,23 @@ fi
 
 echo "Found package at: $PACKAGE_FILE"
 
-# Extract CHANGELOG.md from the downloaded zip
+# Extract README.md from the downloaded zip
 ZIP_FILE="/Users/runner/Library/AutoPkg/Cache/github.fleetdm.fleetctl.pkg.recipe/downloads/fleetctl_v*_macos.zip"
-CHANGELOG_CONTENT=""
+README_CONTENT=""
 if [ -f $(ls $ZIP_FILE) ]; then
-    echo "Extracting CHANGELOG.md from zip..."
-    unzip -p $(ls $ZIP_FILE) "*/CHANGELOG.md" > /tmp/CHANGELOG.md
-    if [ -f /tmp/CHANGELOG.md ]; then
-        # Escape the changelog content for JSON
-        CHANGELOG_CONTENT=$(cat /tmp/CHANGELOG.md | jq -Rs .)
-        CHANGELOG_CONTENT=${CHANGELOG_CONTENT:1:-1} # Remove surrounding quotes
+    echo "Extracting README.md from zip..."
+    unzip -p $(ls $ZIP_FILE) "*/README.md" > /tmp/README.md
+    if [ -f /tmp/README.md ]; then
+        # Escape the readme content for JSON
+        README_CONTENT=$(cat /tmp/README.md | jq -Rs .)
+        README_CONTENT=${README_CONTENT:1:-1} # Remove surrounding quotes
     else
-        echo "CHANGELOG.md not found in zip file"
-        CHANGELOG_CONTENT="No changelog available"
+        echo "README.md not found in zip file"
+        README_CONTENT="No readme available"
     fi
 else
     echo "Zip file not found"
-    CHANGELOG_CONTENT="No changelog available"
+    README_CONTENT="No readme available"
 fi
 
 # Calculate package checksum
@@ -83,7 +83,7 @@ RELEASE_TAG="${FLEET_VERSION}"
 # Create the release body
 RELEASE_BODY="Package SHA256: ${PACKAGE_SHA256}
 
-${CHANGELOG_CONTENT}"
+${README_CONTENT}"
 
 # Create release data
 RELEASE_DATA=$(jq -n \
@@ -144,5 +144,5 @@ fi
 echo "Successfully uploaded package to release"
 
 # Clean up
-rm -f /tmp/CHANGELOG.md
+rm -f /tmp/README.md
 defaults delete com.github.autopkg GITHUB_TOKEN
