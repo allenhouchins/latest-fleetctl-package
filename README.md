@@ -21,8 +21,8 @@ Automated package builder for Fleet's command-line tool `fleetctl`. Get the late
    ```
 
 Note: The `pkg` installer is unsigned, so if you install via double-clicking the `pkg` in Finder, you will get a message stating that it cannot be opened.
-The most reliable way to avoid this is to run the Installer app via its command line interface (admin privileges are required): `sudo /usr/sbin/installer -pkg /path/to/fleetctl_v#.#.#.pkg -target /`.
-You can also allow the pkg to be installed via the Privacy & Security panel in System Settings.
+To avoid this, run the Installer app via the command line: `sudo installer -pkg /path/to/fleetctl_v#.#.#.pkg -target /`.
+You can also allow the `pkg` to be installed through Finder by allow it through the Privacy & Security panel in System Settings.
 
 ## How It Works
 
