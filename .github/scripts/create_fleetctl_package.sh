@@ -53,21 +53,38 @@ fi
 
 echo "Found package at: $PACKAGE_FILE"
 
+# Extract CHANGELOG.md from the downloaded zip
+ZIP_FILE="/Users/runner/Library/AutoPkg/Cache/github.fleetdm.fleetctl.pkg.recipe/downloads/fleetctl_v*_macos.zip"
+CHANGELOG_CONTENT=""
+if [ -f $(ls $ZIP_FILE) ]; then
+    echo "Extracting CHANGELOG.md from zip..."
+    unzip -p $(ls $ZIP_FILE) "*/CHANGELOG.md" > /tmp/CHANGELOG.md
+    if [ -f /tmp/CHANGELOG.md ]; then
+        CHANGELOG_CONTENT=$(cat /tmp/CHANGELOG.md)
+    else
+        echo "CHANGELOG.md not found in zip file"
+        CHANGELOG_CONTENT="No changelog available"
+    fi
+else
+    echo "Zip file not found"
+    CHANGELOG_CONTENT="No changelog available"
+fi
+
 # Calculate package checksum
 PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
 
 # Create GitHub release
 echo "Creating GitHub release..."
+PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
 RELEASE_TAG="${FLEET_VERSION}"
-RELEASE_NAME="Fleet ${FLEET_VERSION} Package"
 
 # Create JSON payload file for the release
 cat > release.json << EOF
 {
   "tag_name": "${RELEASE_TAG}",
   "target_commitish": "main",
-  "name": "${RELEASE_NAME}",
-  "body": "Fleet package version ${FLEET_VERSION}\\n\\nPackage SHA256: ${PACKAGE_SHA256}",
+  "name": "${PACKAGE_NAME}",
+  "body": "Package SHA256: ${PACKAGE_SHA256}\\n\\n${CHANGELOG_CONTENT}",
   "draft": false,
   "prerelease": false,
   "generate_release_notes": false
@@ -96,7 +113,6 @@ echo "Created release with ID: ${RELEASE_ID}"
 
 # Upload the package file
 echo "Uploading package to release..."
-PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
 UPLOAD_RESPONSE=$(curl -L \
   -X POST \
   -H "Accept: application/vnd.github+json" \
@@ -116,5 +132,5 @@ fi
 echo "Successfully uploaded package to release"
 
 # Clean up
-rm -f release.json
+rm -f release.json /tmp/CHANGELOG.md
 defaults delete com.github.autopkg GITHUB_TOKEN
