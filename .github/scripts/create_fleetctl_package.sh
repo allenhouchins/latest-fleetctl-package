@@ -80,17 +80,21 @@ echo "Creating GitHub release..."
 PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
 RELEASE_TAG="${FLEET_VERSION}"
 
+# Create the release body
+RELEASE_BODY="Package SHA256: ${PACKAGE_SHA256}
+
+${CHANGELOG_CONTENT}"
+
 # Create release data
 RELEASE_DATA=$(jq -n \
     --arg tag "${RELEASE_TAG}" \
     --arg name "${PACKAGE_NAME}" \
-    --arg sha "${PACKAGE_SHA256}" \
-    --arg changelog "${CHANGELOG_CONTENT}" \
+    --arg body "${RELEASE_BODY}" \
     '{
         tag_name: $tag,
         target_commitish: "main",
         name: $name,
-        body: "Package SHA256: " + $sha + "\n\n" + $changelog,
+        body: $body,
         draft: false,
         prerelease: false,
         generate_release_notes: false
