@@ -60,26 +60,28 @@ PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
 echo "Creating GitHub release..."
 RELEASE_TAG="${FLEET_VERSION}"
 RELEASE_NAME="Fleet ${FLEET_VERSION} Package"
-RELEASE_BODY="Fleet package version ${FLEET_VERSION}
 
-Package SHA256: ${PACKAGE_SHA256}"
+# Create JSON payload file for the release
+cat > release.json << EOF
+{
+  "tag_name": "${RELEASE_TAG}",
+  "target_commitish": "main",
+  "name": "${RELEASE_NAME}",
+  "body": "Fleet package version ${FLEET_VERSION}\\n\\nPackage SHA256: ${PACKAGE_SHA256}",
+  "draft": false,
+  "prerelease": false,
+  "generate_release_notes": false
+}
+EOF
 
-# Create the release
+# Create the release using the JSON file
 RELEASE_RESPONSE=$(curl -L \
   -X POST \
   -H "Accept: application/vnd.github+json" \
   -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases" \
-  -d "{
-    \"tag_name\":\"${RELEASE_TAG}\",
-    \"target_commitish\":\"main\",
-    \"name\":\"${RELEASE_NAME}\",
-    \"body\":\"${RELEASE_BODY}\",
-    \"draft\":false,
-    \"prerelease\":false,
-    \"generate_release_notes\":false
-  }")
+  -d @release.json)
 
 # Get the release ID from the response
 RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | jq -r '.id')
@@ -95,21 +97,24 @@ echo "Created release with ID: ${RELEASE_ID}"
 # Upload the package file
 echo "Uploading package to release..."
 PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
-curl -L \
+UPLOAD_RESPONSE=$(curl -L \
   -X POST \
   -H "Accept: application/vnd.github+json" \
   -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   -H "Content-Type: application/octet-stream" \
   "https://uploads.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets?name=${PACKAGE_NAME}" \
-  --data-binary "@${PACKAGE_FILE}"
+  --data-binary "@${PACKAGE_FILE}")
 
-if [ $? -ne 0 ]; then
-    echo "Failed to upload package to release"
+UPLOAD_STATUS=$?
+if [ $UPLOAD_STATUS -ne 0 ]; then
+    echo "Failed to upload package to release. Status: ${UPLOAD_STATUS}"
+    echo "Response: ${UPLOAD_RESPONSE}"
     exit 1
 fi
 
 echo "Successfully uploaded package to release"
 
-# Clean up the GitHub token
+# Clean up
+rm -f release.json
 defaults delete com.github.autopkg GITHUB_TOKEN
