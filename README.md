@@ -44,14 +44,12 @@ The automation uses [AutoPkg](https://github.com/autopkg/autopkg) with custom re
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
 - [Fleet](https://github.com/fleetdm/fleet) - For creating and maintaining `fleetctl`
 - [AutoPkg](https://github.com/autopkg/autopkg) - For the automation framework
+- [homebysix-recipes](https://github.com/autopkg/homebysix-recipes/tree/master/VersionSplitter) - For VersionSplitter
 
 ## Support
 
