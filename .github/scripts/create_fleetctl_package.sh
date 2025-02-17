@@ -61,23 +61,24 @@ echo "Creating GitHub release..."
 PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
 RELEASE_TAG="${FLEET_VERSION}"
 
-# Create release data
-RELEASE_DATA=$(jq -n \
-    --arg tag "${RELEASE_TAG}" \
-    --arg name "${PACKAGE_NAME}" \
-    --arg sha "${PACKAGE_SHA256}" \
-    '{
-        tag_name: $tag,
-        target_commitish: "main",
-        name: $name,
-        body: "Package SHA256: " + $sha,
-        draft: false,
-        prerelease: false,
-        generate_release_notes: false
-    }')
+# Create the release body
+RELEASE_BODY="Package SHA256: ${PACKAGE_SHA256}"
+
+# Create release data using a heredoc to ensure proper JSON formatting
+cat > release.json << EOF
+{
+  "tag_name": "${RELEASE_TAG}",
+  "target_commitish": "main",
+  "name": "${PACKAGE_NAME}",
+  "body": "${RELEASE_BODY}",
+  "draft": false,
+  "prerelease": false,
+  "generate_release_notes": false
+}
+EOF
 
 echo "Creating release with data:"
-echo "${RELEASE_DATA}" | jq .
+cat release.json
 
 # Create the release
 RELEASE_RESPONSE=$(curl -L \
@@ -86,7 +87,7 @@ RELEASE_RESPONSE=$(curl -L \
     -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases" \
-    -d "${RELEASE_DATA}")
+    -d @release.json)
 
 # Get the release ID from the response
 RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | jq -r '.id')
@@ -120,4 +121,5 @@ fi
 echo "Successfully uploaded package to release"
 
 # Clean up
+rm -f release.json
 defaults delete com.github.autopkg GITHUB_TOKEN
