@@ -60,8 +60,15 @@ if [ -f $(ls $ZIP_FILE) ]; then
     echo "Extracting README.md from zip..."
     unzip -p $(ls $ZIP_FILE) "*/README.md" > /tmp/README.md
     if [ -f /tmp/README.md ]; then
-        # Escape the readme content for JSON
-        README_CONTENT=$(cat /tmp/README.md | jq -Rs .)
+        # Preserve markdown formatting by using Python to properly escape the content
+        README_CONTENT=$(python3 -c '
+import json
+import sys
+
+with open("/tmp/README.md", "r") as f:
+    content = f.read()
+print(json.dumps(content))
+        ')
         README_CONTENT=${README_CONTENT:1:-1} # Remove surrounding quotes
     else
         echo "README.md not found in zip file"
