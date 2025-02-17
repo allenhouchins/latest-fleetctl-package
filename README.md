@@ -5,9 +5,9 @@ Automated package builder for Fleet's command-line tool `fleetctl`. Get the late
 ## Features
 
 - Automated package generation every 6 hours
-- Pre-built macOS packages (`.pkg`) for easy installation
+- Pre-built macOS package (`.pkg`) for easy installation
 - No dependencies required (`npm`, `brew`, etc.)
-- Proper PATH configuration handled by installer
+- `$PATH` configuration handled by installer
 - Automated version tracking and updates
 
 ## Installation
@@ -24,13 +24,14 @@ Note: The `pkg` installer is unsigned, so if you install via double-clicking the
 To avoid this, run the Installer app via the command line: `sudo installer -pkg /path/to/fleetctl_v#.#.#.pkg -target /`.
 You can also allow the `pkg` to be installed through Finder by allow it through the Privacy & Security panel in System Settings.
 
+The package installs `fleetctl` to `/opt/fleetdm/fleetctl` and puts a symlink in `/usr/local/bin`
+
 ## How It Works
 
 This repository uses GitHub Actions to automatically:
 1. Check for new `fleetctl` releases every 6 hours
 2. Generate a new macOS package when updates are detected
 3. Create a new release with the built package
-4. The package installs `fleetctl` to `/opt/fleetdm/fleetctl` and puts a symlink in `/usr/local/bin`
 
 The automation uses [AutoPkg](https://github.com/autopkg/autopkg) with custom recipes:
 - [`fleetctl.download.recipe`](https://github.com/allenhouchins/fleet-stuff/blob/main/autopkg-fleetctl/fleetctl.download.recipe) - Handles downloading the latest release
@@ -38,16 +39,14 @@ The automation uses [AutoPkg](https://github.com/autopkg/autopkg) with custom re
 
 ## Benefits Over Manual Installation
 
-- No need to install Node.js or npm
+- No need to install Node.js or `npm`
 - No Homebrew required
-- Automatic PATH configuration
-- Simple double-click installation
+- Automatic `$PATH` configuration
 - Official releases packaged as native macOS installers
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
+Contributions are welcome! Please feel free to submit a Pull Request or open an Issue.
 
 ## Acknowledgments
 
