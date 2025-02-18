@@ -37,9 +37,20 @@ autopkg repo-add https://github.com/allenhouchins/fleet-stuff.git
 # Set up GitHub token for AutoPkg
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
 
-# Run the AutoPkg recipe for Fleet
+# Run the AutoPkg recipe for Fleet with verbose output
 echo "Running the AutoPkg recipe to create the Fleet package..."
-autopkg run -v fleetctl.pkg
+AUTOPKG_OUTPUT=$(autopkg run -vv fleetctl.pkg)
+echo "AutoPkg Output:"
+echo "$AUTOPKG_OUTPUT"
+
+# Extract the actual version from the downloaded zip file
+ZIP_FILE="/Users/runner/Library/AutoPkg/Cache/github.fleetdm.fleetctl.pkg.recipe/downloads/fleetctl_v*_macos.zip"
+if [ -f $(ls $ZIP_FILE 2>/dev/null) ]; then
+    ACTUAL_VERSION=$(ls $ZIP_FILE | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+    echo "Detected version from zip file: $ACTUAL_VERSION"
+else
+    echo "Warning: Could not find zip file to determine version"
+fi
 
 # Find the created package in the correct location
 PACKAGE_FILE=$(ls /Users/runner/Library/AutoPkg/Cache/github.fleetdm.fleetctl.pkg.recipe/fleetctl_v*.pkg | tail -n 1)
@@ -59,7 +70,12 @@ PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
 # Create GitHub release
 echo "Creating GitHub release..."
 PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
-RELEASE_TAG="${FLEET_VERSION}"
+RELEASE_TAG="${ACTUAL_VERSION}"
+
+echo "Debug info:"
+echo "Package name: $PACKAGE_NAME"
+echo "Release tag: $RELEASE_TAG"
+echo "Environment FLEET_VERSION: $FLEET_VERSION"
 
 # Create the release body
 RELEASE_BODY="Package SHA256: ${PACKAGE_SHA256}"
@@ -77,7 +93,7 @@ cat > release.json << EOF
 }
 EOF
 
-echo "Creating release with data:"
+echo "Release JSON content:"
 cat release.json
 
 # Create the release
