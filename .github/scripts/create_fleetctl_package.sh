@@ -37,23 +37,18 @@ autopkg repo-add https://github.com/allenhouchins/fleet-stuff.git
 # Set up GitHub token for AutoPkg
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
 
-# Run the AutoPkg recipe for Fleet with verbose output
+# Run the AutoPkg recipe for Fleet with verbose output and capture version
 echo "Running the AutoPkg recipe to create the Fleet package..."
 AUTOPKG_OUTPUT=$(autopkg run -vv fleetctl.pkg)
 echo "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
-# Extract the actual version from the downloaded zip file
-ZIP_FILE="/Users/runner/Library/AutoPkg/Cache/github.fleetdm.fleetctl.pkg.recipe/downloads/fleetctl_v*_macos.zip"
-if [ -f $(ls $ZIP_FILE 2>/dev/null) ]; then
-    ACTUAL_VERSION=$(ls $ZIP_FILE | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
-    echo "Detected version from zip file: $ACTUAL_VERSION"
-else
-    echo "Warning: Could not find zip file to determine version"
-fi
+# Get the version from the autopkg output
+DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep "version:" | tail -n1 | awk '{print $2}')
+echo "Detected version from AutoPkg: $DETECTED_VERSION"
 
 # Find the created package in the correct location
-PACKAGE_FILE=$(ls /Users/runner/Library/AutoPkg/Cache/github.fleetdm.fleetctl.pkg.recipe/fleetctl_v*.pkg | tail -n 1)
+PACKAGE_FILE=$(find /Users/runner/Library/AutoPkg/Cache/github.fleetdm.fleetctl.pkg.recipe -name "fleetctl_v*.pkg" -type f | sort | tail -n 1)
 
 if [ ! -f "$PACKAGE_FILE" ]; then
     echo "Package not found at expected location!"
@@ -69,13 +64,13 @@ PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
 
 # Create GitHub release
 echo "Creating GitHub release..."
-PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
-RELEASE_TAG="${ACTUAL_VERSION}"
+PACKAGE_NAME="fleetctl_v${DETECTED_VERSION}.pkg"
+RELEASE_TAG="v${DETECTED_VERSION}"
 
 echo "Debug info:"
 echo "Package name: $PACKAGE_NAME"
 echo "Release tag: $RELEASE_TAG"
-echo "Environment FLEET_VERSION: $FLEET_VERSION"
+echo "Detected version: $DETECTED_VERSION"
 
 # Create the release body
 RELEASE_BODY="Package SHA256: ${PACKAGE_SHA256}"
