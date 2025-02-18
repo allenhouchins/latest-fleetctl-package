@@ -38,6 +38,7 @@ autopkg repo-add https://github.com/allenhouchins/fleet-stuff.git
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Run the AutoPkg recipe for Fleet with verbose output and capture version
 echo "Running the AutoPkg recipe to create the Fleet package..."
 AUTOPKG_OUTPUT=$(autopkg run -vv fleetctl.pkg)
@@ -47,6 +48,11 @@ echo "$AUTOPKG_OUTPUT"
 # Get the version from the autopkg output
 DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep "version:" | tail -n1 | awk '{print $2}')
 echo "Detected version from AutoPkg: $DETECTED_VERSION"
+=======
+# Run the AutoPkg recipe for Fleet
+echo "Running the AutoPkg recipe to create the Fleet package..."
+autopkg run -v fleetctl.pkg
+>>>>>>> parent of ca60871 (bug fixes)
 =======
 # Run the AutoPkg recipe for Fleet
 echo "Running the AutoPkg recipe to create the Fleet package..."
@@ -71,6 +77,7 @@ PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
 # Create GitHub release
 echo "Creating GitHub release..."
 <<<<<<< HEAD
+<<<<<<< HEAD
 PACKAGE_NAME="fleetctl_v${DETECTED_VERSION}.pkg"
 RELEASE_TAG="v${DETECTED_VERSION}"
 
@@ -78,6 +85,10 @@ echo "Debug info:"
 echo "Package name: $PACKAGE_NAME"
 echo "Release tag: $RELEASE_TAG"
 echo "Detected version: $DETECTED_VERSION"
+=======
+PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
+RELEASE_TAG="${FLEET_VERSION}"
+>>>>>>> parent of ca60871 (bug fixes)
 =======
 PACKAGE_NAME=$(basename "${PACKAGE_FILE}")
 RELEASE_TAG="${FLEET_VERSION}"
