@@ -106,7 +106,7 @@ if [ ! -d "$CACHE_DIR" ]; then
     exit 1
 fi
 
-PACKAGE_FILE=$(find "$CACHE_DIR" -name "fleetctl_v*.pkg" -type f | sort | tail -n 1)
+PACKAGE_FILE=$(find "$CACHE_DIR" -name "fleetctl_v${DETECTED_VERSION}.pkg" -type f)
 
 if [ ! -f "$PACKAGE_FILE" ]; then
     log "Error: Package not found at expected location!"
