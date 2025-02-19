@@ -27,9 +27,11 @@ verify_recipe() {
     }
 }
 
-# Define the URL and target paths for AutoPkg
+# Define constants
 AUTOPKG_URL="https://github.com/autopkg/autopkg/releases/download/v2.7.3/autopkg-2.7.3.pkg"
 DOWNLOAD_PATH="/tmp/autopkg-2.7.3.pkg"
+RECIPE_ID="com.github.jc0b.pkg.fleetctl"
+CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
 
 # Download and install AutoPkg if not present
 if ! check_command autopkg; then
@@ -75,50 +77,34 @@ fi
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
 
 # Verify recipe exists before running
-RECIPE_ID="com.github.jc0b.pkg.fleetctl"
 verify_recipe "$RECIPE_ID" || exit 1
 
 # Run the AutoPkg recipe with verbose output and capture version
 log "Running the AutoPkg recipe to create the Fleet package..."
 AUTOPKG_OUTPUT=$(autopkg run -vv "$RECIPE_ID" 2>&1)
-# Check if the package was actually created regardless of exit code
-if [ -f "$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg" ]; then
-    log "Package created successfully despite potential warnings"
+
+# Check if the package was created
+if [ -d "$CACHE_DIR" ]; then
+    # Get the version from the autopkg output
+    DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep "version:" | tail -n1 | awk '{print $2}')
+    if [ -z "$DETECTED_VERSION" ]; then
+        log "Error: Could not detect version from AutoPkg output"
+        exit 1
+    fi
+    log "Detected version from AutoPkg: $DETECTED_VERSION"
+
+    PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
+    
+    if [ ! -f "$PACKAGE_FILE" ]; then
+        log "Error: Package not found at: $PACKAGE_FILE"
+        log "Listing cache directory contents:"
+        ls -la "$CACHE_DIR"
+        exit 1
+    fi
 else
-    log "Error running AutoPkg recipe. Output:"
-    echo "$AUTOPKG_OUTPUT"
-    exit 1
-fi
-
-log "AutoPkg Output:"
-echo "$AUTOPKG_OUTPUT"
-
-# Get the version from the autopkg output
-DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep "version:" | tail -n1 | awk '{print $2}')
-if [ -z "$DETECTED_VERSION" ]; then
-    log "Error: Could not detect version from AutoPkg output"
-    exit 1
-fi
-log "Detected version from AutoPkg: $DETECTED_VERSION"
-
-# Define cache directory
-CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
-
-# Find the created package in the correct location
-CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
-if [ ! -d "$CACHE_DIR" ]; then
     log "Error: Cache directory not found at: $CACHE_DIR"
-    log "Available cache directories:"
-    ls -la /Users/runner/Library/AutoPkg/Cache/
-    exit 1
-fi
-
-PACKAGE_FILE=$(find "$CACHE_DIR" -name "fleetctl_v${DETECTED_VERSION}.pkg" -type f)
-
-if [ ! -f "$PACKAGE_FILE" ]; then
-    log "Error: Package not found at expected location!"
-    log "Listing cache directory contents:"
-    ls -la "$CACHE_DIR"
+    log "AutoPkg Output:"
+    echo "$AUTOPKG_OUTPUT"
     exit 1
 fi
 
