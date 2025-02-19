@@ -42,15 +42,24 @@ autopkg repo-add https://github.com/allenhouchins/fleet-stuff.git
 # Set up GitHub token for AutoPkg
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
 
-# Run the AutoPkg recipe for Fleet with verbose output and capture version
+# Get the version directly from GitHub API first
+LATEST_VERSION=$(curl -L \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/repos/fleetdm/fleet/releases/latest" | jq -r '.tag_name' | sed 's/fleet-v//')
+
+log "Latest version from GitHub API: ${LATEST_VERSION}"
+
+# Run the AutoPkg recipe for Fleet with verbose output
 log "Running the AutoPkg recipe to create the Fleet package..."
-AUTOPKG_OUTPUT=$(autopkg run -vv com.github.jc0b.pkg.fleetctl)
+AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
 log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
-# Get the version from the autopkg output
-DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep -A2 "The following packages were built:" | grep "Version" -A1 | tail -n1 | awk '{$1=$1;print}')
-log "Detected version from AutoPkg: $DETECTED_VERSION"
+# Use the latest version we got from GitHub API
+DETECTED_VERSION="${LATEST_VERSION}"
+log "Using version: $DETECTED_VERSION"
 
 # Find the created package in the correct location
 CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
@@ -66,9 +75,6 @@ if [ ! -f "$PACKAGE_FILE" ]; then
         exit 1
     fi
     log "Found package at: $PACKAGE_FILE"
-    # Extract version from filename
-    DETECTED_VERSION=$(basename "$PACKAGE_FILE" | sed -E 's/fleetctl_v(.*)\.pkg/\1/')
-    log "Updated version from filename: $DETECTED_VERSION"
 fi
 
 log "Found package at: $PACKAGE_FILE"
