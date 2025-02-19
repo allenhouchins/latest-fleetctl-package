@@ -31,19 +31,15 @@ fi
 
 # Add required AutoPkg repos
 echo "Adding required AutoPkg repos..."
-autopkg repo-add --minimum-priority 1 https://github.com/jc0b/autopkg-recipes.git
-autopkg repo-add --minimum-priority 1 https://github.com/jazzace/autopkg-processors.git
-
-# Verify recipes are available
-echo "Verifying recipe availability..."
-autopkg list-recipes | grep fleetctl
+autopkg repo-add jazzace-recipes
+autopkg repo-add https://github.com/allenhouchins/fleet-stuff.git
 
 # Set up GitHub token for AutoPkg
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
 
 # Run the AutoPkg recipe for Fleet with verbose output and capture version
 echo "Running the AutoPkg recipe to create the Fleet package..."
-AUTOPKG_OUTPUT=$(PYTHONUNBUFFERED=1 autopkg run -vv --recipe-list <(echo "com.github.jc0b.pkg.fleetctl") 2>&1)
+AUTOPKG_OUTPUT=$(autopkg run -vv com.github.jc0b.pkg.fleetctl)
 echo "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
@@ -51,17 +47,13 @@ echo "$AUTOPKG_OUTPUT"
 DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep "version:" | tail -n1 | awk '{print $2}')
 echo "Detected version from AutoPkg: $DETECTED_VERSION"
 
-# List cache directory for debugging
-echo "Cache directory contents:"
-ls -la "${HOME}/Library/AutoPkg/Cache/"
-
 # Find the created package in the correct location
-PACKAGE_FILE=$(find "${HOME}/Library/AutoPkg/Cache" -name "fleetctl-*.pkg" -type f | sort | tail -n 1)
+PACKAGE_FILE=$(find /Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl -name "fleetctl_v*.pkg" -type f | sort | tail -n 1)
 
 if [ ! -f "$PACKAGE_FILE" ]; then
     echo "Package not found at expected location!"
     echo "Listing directory contents:"
-    ls -la "${HOME}/Library/AutoPkg/Cache"
+    ls -la /Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl/
     exit 1
 fi
 
@@ -72,7 +64,7 @@ PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
 
 # Create GitHub release
 echo "Creating GitHub release..."
-PACKAGE_NAME="fleetctl-${DETECTED_VERSION}.pkg"
+PACKAGE_NAME="fleetctl_v${DETECTED_VERSION}.pkg"
 RELEASE_TAG="v${DETECTED_VERSION}"
 
 echo "Debug info:"
