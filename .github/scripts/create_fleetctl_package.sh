@@ -39,7 +39,7 @@ defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKE
 
 # Run the AutoPkg recipe for Fleet with verbose output and capture version
 echo "Running the AutoPkg recipe to create the Fleet package..."
-AUTOPKG_OUTPUT=$(autopkg run -vv com.github.jc0b.pkg.fleetctl)
+AUTOPKG_OUTPUT=$(autopkg run -vv fleetctl.pkg)
 echo "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
@@ -48,7 +48,7 @@ DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep "version:" | tail -n1 | awk '{p
 echo "Detected version from AutoPkg: $DETECTED_VERSION"
 
 # Find the created package in the correct location
-PACKAGE_FILE=$(find "${RECIPE_CACHE_DIR:-$HOME/Library/AutoPkg/Cache}/com.github.jc0b.pkg.fleetctl" -name "fleetctl-*.pkg" -type f | sort | tail -n 1)
+PACKAGE_FILE=$(find "${RECIPE_CACHE_DIR:-$HOME/Library/AutoPkg/Cache}/fleetctl.pkg" -name "fleetctl_v*.pkg" -type f | sort | tail -n 1)
 
 if [ ! -f "$PACKAGE_FILE" ]; then
     echo "Package not found at expected location!"
