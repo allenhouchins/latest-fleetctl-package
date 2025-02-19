@@ -101,6 +101,9 @@ if [ -z "$DETECTED_VERSION" ]; then
 fi
 log "Detected version from AutoPkg: $DETECTED_VERSION"
 
+# Define cache directory
+CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
+
 # Find the created package in the correct location
 CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
 if [ ! -d "$CACHE_DIR" ]; then
