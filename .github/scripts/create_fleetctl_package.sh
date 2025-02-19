@@ -31,8 +31,8 @@ fi
 
 # Add required AutoPkg repos
 echo "Adding required AutoPkg repos..."
-autopkg repo-add jazzace-recipes
-autopkg repo-add https://github.com/allenhouchins/fleet-stuff.git
+autopkg repo-add https://github.com/jc0b/autopkg-recipes.git
+autopkg repo-add https://github.com/jazzace/autopkg-processors.git
 
 # Set up GitHub token for AutoPkg
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
