@@ -49,7 +49,7 @@ log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
 # Get the version from the autopkg output
-DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep -A2 "The following packages were built:" | grep "Version" -A1 | tail -n1 | awk '{print $1}')
+DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep -A2 "The following packages were built:" | grep "Version" -A1 | tail -n1 | awk '{$1=$1;print}')
 log "Detected version from AutoPkg: $DETECTED_VERSION"
 
 # Find the created package in the correct location
@@ -102,25 +102,58 @@ EOF
 log "Creating release with data:"
 cat release.json
 
-# Create the release
-RELEASE_RESPONSE=$(curl -L \
-    -X POST \
+# Check if release exists
+EXISTING_RELEASE=$(curl -L \
     -H "Accept: application/vnd.github+json" \
     -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
-    "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases" \
-    -d @release.json)
+    "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${RELEASE_TAG}")
 
-# Get the release ID from the response
-RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | jq -r '.id')
+RELEASE_ID=$(echo "${EXISTING_RELEASE}" | jq -r '.id')
 
-if [ -z "${RELEASE_ID}" ] || [ "${RELEASE_ID}" = "null" ]; then
-    log "Failed to create release. Response:"
-    echo "${RELEASE_RESPONSE}" | jq .
-    exit 1
+if [ "${RELEASE_ID}" = "null" ]; then
+    log "Creating new release..."
+    # Create the release
+    RELEASE_RESPONSE=$(curl -L \
+        -X POST \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases" \
+        -d @release.json)
+
+    # Get the release ID from the response
+    RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | jq -r '.id')
+
+    if [ -z "${RELEASE_ID}" ] || [ "${RELEASE_ID}" = "null" ]; then
+        log "Failed to create release. Response:"
+        echo "${RELEASE_RESPONSE}" | jq .
+        exit 1
+    fi
+    log "Created new release with ID: ${RELEASE_ID}"
+else
+    log "Release already exists with ID: ${RELEASE_ID}"
 fi
 
-log "Created release with ID: ${RELEASE_ID}"
+# Check for existing assets
+EXISTING_ASSETS=$(curl -L \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets")
+
+EXISTING_ASSET_ID=$(echo "${EXISTING_ASSETS}" | jq -r ".[] | select(.name==\"${PACKAGE_NAME}\") | .id")
+
+# Delete existing asset if it exists
+if [ ! -z "${EXISTING_ASSET_ID}" ] && [ "${EXISTING_ASSET_ID}" != "null" ]; then
+    log "Deleting existing asset with ID: ${EXISTING_ASSET_ID}"
+    curl -L \
+        -X DELETE \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/assets/${EXISTING_ASSET_ID}"
+fi
 
 # Upload the package file
 log "Uploading package to release..."
