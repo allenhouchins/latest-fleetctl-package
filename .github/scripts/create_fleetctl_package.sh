@@ -80,11 +80,15 @@ verify_recipe "$RECIPE_ID" || exit 1
 
 # Run the AutoPkg recipe with verbose output and capture version
 log "Running the AutoPkg recipe to create the Fleet package..."
-AUTOPKG_OUTPUT=$(autopkg run -vv "$RECIPE_ID" 2>&1) || {
+AUTOPKG_OUTPUT=$(autopkg run -vv "$RECIPE_ID" 2>&1)
+# Check if the package was actually created regardless of exit code
+if [ -f "$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg" ]; then
+    log "Package created successfully despite potential warnings"
+else
     log "Error running AutoPkg recipe. Output:"
     echo "$AUTOPKG_OUTPUT"
     exit 1
-}
+fi
 
 log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
