@@ -49,7 +49,7 @@ log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
 # Get the version from the autopkg output
-DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep "version:" | tail -n1 | awk '{print $2}')
+DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep -A2 "The following packages were built:" | grep "Version" -A1 | tail -n1 | awk '{print $1}')
 log "Detected version from AutoPkg: $DETECTED_VERSION"
 
 # Find the created package in the correct location
@@ -57,10 +57,18 @@ CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
 PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
 
 if [ ! -f "$PACKAGE_FILE" ]; then
-    log "Package not found at expected location!"
-    log "Listing directory contents:"
-    ls -la "$CACHE_DIR"
-    exit 1
+    log "Package not found at: $PACKAGE_FILE"
+    log "Searching for package in cache directory..."
+    PACKAGE_FILE=$(find "$CACHE_DIR" -name "fleetctl_v*.pkg" -type f)
+    if [ -z "$PACKAGE_FILE" ]; then
+        log "No package file found! Directory contents:"
+        ls -la "$CACHE_DIR"
+        exit 1
+    fi
+    log "Found package at: $PACKAGE_FILE"
+    # Extract version from filename
+    DETECTED_VERSION=$(basename "$PACKAGE_FILE" | sed -E 's/fleetctl_v(.*)\.pkg/\1/')
+    log "Updated version from filename: $DETECTED_VERSION"
 fi
 
 log "Found package at: $PACKAGE_FILE"
