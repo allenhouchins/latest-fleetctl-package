@@ -24,7 +24,7 @@ Note: The `pkg` installer is unsigned, so if you install via double-clicking the
 To avoid this, run the Installer app via the command line: `sudo installer -pkg /path/to/fleetctl_v#.#.#.pkg -target /`.
 You can also allow the `pkg` to be installed through Finder by allow it through the Privacy & Security panel in System Settings.
 
-The package installs `fleetctl` to `/opt/fleetdm/fleetctl` and puts a symlink in `/usr/local/bin`
+The package installs `fleetctl` to `/usr/local/bin`
 
 ## How It Works
 
@@ -52,7 +52,7 @@ Contributions are welcome! Please feel free to submit a Pull Request or open an 
 
 - [Fleet](https://github.com/fleetdm/fleet) - For creating and maintaining `fleetctl`
 - [AutoPkg](https://github.com/autopkg/autopkg) - For the automation framework
-- [homebysix-recipes](https://github.com/autopkg/homebysix-recipes/tree/master/VersionSplitter) - For VersionSplitter
+- [jc0b](https://github.com/jc0b) - For creating the original AutoPkg recipes 
 
 ## Support
 
