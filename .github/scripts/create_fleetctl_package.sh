@@ -67,7 +67,19 @@ defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKE
 
 # Run the AutoPkg recipe with verbose output and capture version
 log "Running the AutoPkg recipe to create the Fleet package..."
-AUTOPKG_OUTPUT=$(autopkg run -vv "$RECIPE_ID" 2>&1)
+log "Checking recipe availability..."
+autopkg list-recipes | grep "$RECIPE_ID" || {
+    log "Recipe $RECIPE_ID not found in available recipes"
+    log "Available recipes:"
+    autopkg list-recipes
+    exit 1
+}
+
+AUTOPKG_OUTPUT=$(autopkg run -vv "$RECIPE_ID" 2>&1) || {
+    log "Error running AutoPkg recipe. Full output:"
+    echo "$AUTOPKG_OUTPUT"
+    exit 1
+}
 
 # Check if the package was created
 if [ -d "$CACHE_DIR" ]; then
