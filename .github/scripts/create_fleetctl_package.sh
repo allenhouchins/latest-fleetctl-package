@@ -1,110 +1,65 @@
 #!/bin/bash
 
-# Enable error handling
-set -euo pipefail
-
 # Function to log messages with timestamps
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Function to check command existence
-check_command() {
-    if ! command -v "$1" &> /dev/null; then
-        log "Error: $1 is not installed"
-        return 1
-    fi
-}
-
-# Define constants
+# Define the URL and target paths for AutoPkg
 AUTOPKG_URL="https://github.com/autopkg/autopkg/releases/download/v2.7.3/autopkg-2.7.3.pkg"
 DOWNLOAD_PATH="/tmp/autopkg-2.7.3.pkg"
-RECIPE_ID="com.github.allenhouchins.pkg.fleetctl"
-CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
 
-# Download and install AutoPkg if not present
-if ! check_command autopkg; then
-    log "Downloading AutoPkg package..."
-    curl -L -o "$DOWNLOAD_PATH" "$AUTOPKG_URL" || {
-        log "Failed to download AutoPkg"
-        exit 1
-    }
+# Download and install AutoPkg
+log "Downloading AutoPkg package..."
+curl -L -o "$DOWNLOAD_PATH" "$AUTOPKG_URL"
 
+if [ $? -ne 0 ]; then
+    log "Download failed!"
+    exit 1
+fi
+
+if ! command -v autopkg &> /dev/null; then
     log "Installing AutoPkg..."
-    sudo installer -pkg "$DOWNLOAD_PATH" -target / || {
-        log "AutoPkg installation failed"
+    sudo installer -pkg "$DOWNLOAD_PATH" -target /
+    if [ $? -ne 0 ]; then
+        log "AutoPkg installation failed!"
         exit 1
-    }
+    fi
 fi
 
 # Install Homebrew if needed
-if ! check_command brew; then
+if ! command -v brew &> /dev/null; then
     log "Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     brew install git jq
 fi
 
-# Clean up any existing AutoPkg cache
-log "Cleaning AutoPkg cache..."
-rm -rf ~/Library/AutoPkg/Cache/*
-
 # Add required AutoPkg repos
 log "Adding required AutoPkg repos..."
-autopkg repo-add jazzace-recipes || log "Warning: Failed to add jazzace-recipes"
-autopkg repo-add https://github.com/allenhouchins/fleet-stuff.git || log "Warning: Failed to add fleet-stuff repo"
-
-# Update repos to ensure we have the latest recipes
-log "Updating AutoPkg repos..."
-autopkg repo-update all
+autopkg repo-add jazzace-recipes
+autopkg repo-add https://github.com/allenhouchins/fleet-stuff.git
 
 # Set up GitHub token for AutoPkg
-if [ -z "${PACKAGE_AUTOMATION_TOKEN:-}" ]; then
-    log "Error: PACKAGE_AUTOMATION_TOKEN environment variable is not set"
-    exit 1
-fi
-
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
 
-# Run the AutoPkg recipe with verbose output and capture version
+# Run the AutoPkg recipe for Fleet with verbose output and capture version
 log "Running the AutoPkg recipe to create the Fleet package..."
-log "Checking recipe location..."
-find ~/Library/AutoPkg/RecipeRepos -name "fleetctl.*.recipe.yaml" -ls
-log "Checking recipe availability..."
-autopkg list-recipes | grep "$RECIPE_ID" || {
-    log "Recipe $RECIPE_ID not found in available recipes"
-    log "Available recipes:"
-    autopkg list-recipes
-    exit 1
-}
+AUTOPKG_OUTPUT=$(autopkg run -vv com.github.jc0b.pkg.fleetctl)
+log "AutoPkg Output:"
+echo "$AUTOPKG_OUTPUT"
 
-AUTOPKG_OUTPUT=$(autopkg run -vv "$RECIPE_ID" 2>&1) || {
-    log "Error running AutoPkg recipe. Full output:"
-    echo "$AUTOPKG_OUTPUT"
-    exit 1
-}
+# Get the version from the autopkg output
+DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep "version:" | tail -n1 | awk '{print $2}')
+log "Detected version from AutoPkg: $DETECTED_VERSION"
 
-# Check if the package was created
-if [ -d "$CACHE_DIR" ]; then
-    # Get the version from the autopkg output
-    DETECTED_VERSION=$(echo "$AUTOPKG_OUTPUT" | grep "version:" | tail -n1 | awk '{print $2}')
-    if [ -z "$DETECTED_VERSION" ]; then
-        log "Error: Could not detect version from AutoPkg output"
-        exit 1
-    fi
-    log "Detected version from AutoPkg: $DETECTED_VERSION"
+# Find the created package in the correct location
+CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
+PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
 
-    PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
-    
-    if [ ! -f "$PACKAGE_FILE" ]; then
-        log "Error: Package not found at: $PACKAGE_FILE"
-        log "Listing cache directory contents:"
-        ls -la "$CACHE_DIR"
-        exit 1
-    fi
-else
-    log "Error: Cache directory not found at: $CACHE_DIR"
-    log "AutoPkg Output:"
-    echo "$AUTOPKG_OUTPUT"
+if [ ! -f "$PACKAGE_FILE" ]; then
+    log "Package not found at expected location!"
+    log "Listing directory contents:"
+    ls -la "$CACHE_DIR"
     exit 1
 fi
 
@@ -136,11 +91,8 @@ cat > release.json << EOF
 }
 EOF
 
-# Verify required environment variables
-if [ -z "${REPO_OWNER:-}" ] || [ -z "${REPO_NAME:-}" ]; then
-    log "Error: REPO_OWNER and REPO_NAME environment variables must be set"
-    exit 1
-fi
+log "Creating release with data:"
+cat release.json
 
 # Create the release
 RELEASE_RESPONSE=$(curl -L \
@@ -155,7 +107,7 @@ RELEASE_RESPONSE=$(curl -L \
 RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | jq -r '.id')
 
 if [ -z "${RELEASE_ID}" ] || [ "${RELEASE_ID}" = "null" ]; then
-    log "Error: Failed to create release. Response:"
+    log "Failed to create release. Response:"
     echo "${RELEASE_RESPONSE}" | jq .
     exit 1
 fi
@@ -175,7 +127,7 @@ UPLOAD_RESPONSE=$(curl -L \
 
 UPLOAD_STATUS=$?
 if [ $UPLOAD_STATUS -ne 0 ]; then
-    log "Error: Failed to upload package to release. Status: ${UPLOAD_STATUS}"
+    log "Failed to upload package to release. Status: ${UPLOAD_STATUS}"
     log "Response: ${UPLOAD_RESPONSE}"
     exit 1
 fi
@@ -185,5 +137,3 @@ log "Successfully uploaded package to release"
 # Clean up
 rm -f release.json
 defaults delete com.github.autopkg GITHUB_TOKEN
-
-log "Script completed successfully"
