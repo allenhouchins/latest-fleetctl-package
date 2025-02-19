@@ -19,7 +19,7 @@ check_command() {
 # Define constants
 AUTOPKG_URL="https://github.com/autopkg/autopkg/releases/download/v2.7.3/autopkg-2.7.3.pkg"
 DOWNLOAD_PATH="/tmp/autopkg-2.7.3.pkg"
-RECIPE_ID="com.github.jc0b.pkg.fleetctl"
+RECIPE_ID="com.github.allenhouchins.pkg.fleetctl"
 CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
 
 # Download and install AutoPkg if not present
@@ -67,6 +67,8 @@ defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKE
 
 # Run the AutoPkg recipe with verbose output and capture version
 log "Running the AutoPkg recipe to create the Fleet package..."
+log "Checking recipe location..."
+find ~/Library/AutoPkg/RecipeRepos -name "fleetctl.*.recipe.yaml" -ls
 log "Checking recipe availability..."
 autopkg list-recipes | grep "$RECIPE_ID" || {
     log "Recipe $RECIPE_ID not found in available recipes"
