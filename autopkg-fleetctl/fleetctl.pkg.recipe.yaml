@@ -13,10 +13,12 @@ Process:
         usr/local: "0755"
         usr/local/bin: "0755"
       pkgroot: "%RECIPE_CACHE_DIR%/pkg_root"
-- Processor: Copier
+  
+  - Processor: Copier
     Arguments:
-      source_path: "%RECIPE_CACHE_DIR%/%NAME%/fleetctl_v%version%_macos"
+      source_path: "%RECIPE_CACHE_DIR%/%NAME%/fleetctl"
       destination_path: "%RECIPE_CACHE_DIR%/pkg_root/usr/local/bin/fleetctl"
+  
   - Processor: PkgCreator
     Arguments:
       pkg_request:
