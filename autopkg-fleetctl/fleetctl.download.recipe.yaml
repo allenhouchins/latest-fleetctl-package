@@ -10,6 +10,8 @@ Process:
     Arguments:
       github_repo: fleetdm/fleet
       asset_regex: fleetctl_v.*_macos.zip
+      sort_by_highest_tag_names: true
+      release_id: "latest"
 
   - Processor: com.github.jazzace.processors/TextSearcher
     Arguments:
