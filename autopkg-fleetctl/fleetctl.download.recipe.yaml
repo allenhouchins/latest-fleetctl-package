@@ -1,26 +1,28 @@
 Description: Gets the latest version of fleetctl from Github releases, and normalises the version.
 Identifier: com.github.jc0b.download.fleetctl
 MinimumVersion: "2.3"
+
 Input:
   NAME: fleetctl
-  CURL_PATH: /usr/bin/curl
+
 Process:
   - Processor: GitHubReleasesInfoProvider
     Arguments:
       github_repo: fleetdm/fleet
       asset_regex: fleetctl_v.*_macos.zip
-      include_prereleases: false
-      sort_by_highest_tag_names: true
-      print_response: true
+
   - Processor: com.github.jazzace.processors/TextSearcher
     Arguments:
       re_pattern: \d+\.\d{1,2}\.\d{1,2}
       text_in: "%version%"
       result_output_var_name: "version"
+
   - Processor: URLDownloader
     Arguments:
-      filename: "%NAME%_v%version%_macos.zip"
+      filename: "%NAME%-%version%.zip"
+
   - Processor: EndOfCheckPhase
+
   - Processor: Unarchiver
     Arguments:
       archive_path: "%pathname%"
