@@ -8,7 +8,6 @@ Input:
   PKGID: com.fleetdm.fleetctl
 
 Process:
-
   - Processor: PkgRootCreator
     Arguments:
       pkgdirs:
@@ -16,12 +15,12 @@ Process:
         usr/local: "0755"
         usr/local/bin: "0755"
       pkgroot: "%RECIPE_CACHE_DIR%/pkg_root"
-
+  
   - Processor: Copier
     Arguments:
       source_path: "%RECIPE_CACHE_DIR%/%NAME%/fleetctl_v%version%_macos_all/fleetctl"
       destination_path: "%RECIPE_CACHE_DIR%/pkg_root/usr/local/bin/fleetctl"
-
+  
   - Processor: PkgCreator
     Arguments:
       pkg_request:
@@ -30,7 +29,7 @@ Process:
             path: "/usr/local/bin/%NAME%"
             user: "root"
             mode: "0755"
-        pkgname: "%NAME%-%version%"
+        pkgname: "%NAME%_v%version%"
         version: "%version%"
         id: "%PKGID%"
         options: "purge_ds_store"
