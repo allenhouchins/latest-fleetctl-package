@@ -15,7 +15,7 @@ Process:
       pkgroot: "%RECIPE_CACHE_DIR%/pkg_root"
 - Processor: Copier
     Arguments:
-      source_path: "%RECIPE_CACHE_DIR%/%NAME%/fleetctl"
+      source_path: "%RECIPE_CACHE_DIR%/%NAME%/fleetctl_v%version%_macos"
       destination_path: "%RECIPE_CACHE_DIR%/pkg_root/usr/local/bin/fleetctl"
   - Processor: PkgCreator
     Arguments:
