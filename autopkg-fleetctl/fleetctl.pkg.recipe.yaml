@@ -14,9 +14,14 @@ Process:
         usr/local/bin: "0755"
       pkgroot: "%RECIPE_CACHE_DIR%/pkg_root"
   
+  - Processor: FileFinder
+    Arguments:
+      pattern: "%RECIPE_CACHE_DIR%/%NAME%/fleetctl_v%version%_macos/*"
+      find_method: "glob"
+  
   - Processor: Copier
     Arguments:
-      source_path: "%RECIPE_CACHE_DIR%/%NAME%/fleetctl"
+      source_path: "%found_matches%"
       destination_path: "%RECIPE_CACHE_DIR%/pkg_root/usr/local/bin/fleetctl"
   
   - Processor: PkgCreator
