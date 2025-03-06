@@ -68,7 +68,7 @@ PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
 if [ ! -f "$PACKAGE_FILE" ]; then
     log "Package not found at: $PACKAGE_FILE"
     log "Searching for package in cache directory..."
-    PACKAGE_FILE=$(find "$CACHE_DIR" -name "fleetctl_v*.pkg" -type f)
+    PACKAGE_FILE=$(find "$CACHE_DIR" -name "fleetctl_v*.pkg" -type f | grep -v "_signed.pkg")
     if [ -z "$PACKAGE_FILE" ]; then
         log "No package file found! Directory contents:"
         ls -la "$CACHE_DIR"
@@ -78,6 +78,58 @@ if [ ! -f "$PACKAGE_FILE" ]; then
 fi
 
 log "Found package at: $PACKAGE_FILE"
+
+# ----- PACKAGE SIGNING IMPLEMENTATION START -----
+
+# Verify the signature components are available
+if [ -z "$DEVELOPER_ID_INSTALLER" ]; then
+    log "Error: DEVELOPER_ID_INSTALLER environment variable is not set."
+    exit 1
+fi
+
+# Define variables for package signing
+SIGNED_PACKAGE_FILE="${PACKAGE_FILE%.pkg}_signed.pkg"
+SIGNING_IDENTITY="${DEVELOPER_ID_INSTALLER}"
+
+log "Preparing to sign package with identity: $SIGNING_IDENTITY"
+log "Using keychain: $SIGNING_KEYCHAIN"
+
+# List the keychain contents to verify our certificate is available
+security find-identity -v -p codesigning
+
+# Sign the package using productsign
+log "Signing package..."
+if [ -n "$SIGNING_KEYCHAIN" ]; then
+    # Sign using the specified keychain
+    productsign --keychain "$SIGNING_KEYCHAIN" --sign "$SIGNING_IDENTITY" "$PACKAGE_FILE" "$SIGNED_PACKAGE_FILE"
+else
+    # Sign using the default keychain
+    productsign --sign "$SIGNING_IDENTITY" "$PACKAGE_FILE" "$SIGNED_PACKAGE_FILE"
+fi
+
+SIGN_STATUS=$?
+if [ $SIGN_STATUS -ne 0 ]; then
+    log "Package signing failed with status: $SIGN_STATUS"
+    exit 1
+fi
+
+log "Package successfully signed: $SIGNED_PACKAGE_FILE"
+
+# Verify the signature
+log "Verifying package signature..."
+pkgutil --check-signature "$SIGNED_PACKAGE_FILE"
+
+if [ $? -ne 0 ]; then
+    log "Package signature verification failed!"
+    exit 1
+fi
+
+log "Package signature verified successfully"
+
+# Use the signed package for the remainder of the script
+PACKAGE_FILE="$SIGNED_PACKAGE_FILE"
+
+# ----- PACKAGE SIGNING IMPLEMENTATION END -----
 
 # Calculate package checksum
 PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
