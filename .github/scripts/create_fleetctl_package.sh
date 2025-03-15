@@ -53,16 +53,67 @@ log "Latest version from GitHub API: ${LATEST_VERSION}"
 
 # Run the AutoPkg recipe for Fleet with verbose output
 log "Running the AutoPkg recipe to create the Fleet package..."
+CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
 AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
 log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
+
+# Check for fleetctl binary and fix path structure if needed
+if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
+    log "AutoPkg recipe failed. Attempting to fix fleetctl binary path..."
+    
+    # Show extracted contents for debugging
+    log "Extracted contents of fleetctl directory:"
+    find "$CACHE_DIR/fleetctl" -type f | sort
+    
+    # Find the actual fleetctl binary
+    EXTRACTED_FLEETCTL=$(find "$CACHE_DIR/fleetctl" -type f -name "fleetctl" | head -n 1)
+    
+    if [ -n "$EXTRACTED_FLEETCTL" ]; then
+        log "Found fleetctl binary at: $EXTRACTED_FLEETCTL"
+        
+        # Create the expected directory structure
+        mkdir -p "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all"
+        cp "$EXTRACTED_FLEETCTL" "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
+        chmod +x "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
+        
+        log "Copied fleetctl binary to expected location"
+        
+        # Try running AutoPkg again
+        log "Running AutoPkg recipe again with fixed path..."
+        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
+        log "AutoPkg Output (second attempt):"
+        echo "$AUTOPKG_OUTPUT"
+    else
+        # Try to find any binary in the extracted files
+        log "Could not find fleetctl binary by name. Looking for any executable file..."
+        EXTRACTED_FILES=$(find "$CACHE_DIR/fleetctl" -type f -perm -u+x | head -n 1)
+        
+        if [ -n "$EXTRACTED_FILES" ]; then
+            log "Found possible binary at: $EXTRACTED_FILES"
+            mkdir -p "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all"
+            cp "$EXTRACTED_FILES" "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
+            chmod +x "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
+            
+            log "Copied possible binary to expected location"
+            
+            # Try running AutoPkg again
+            log "Running AutoPkg recipe again with fixed path..."
+            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
+            log "AutoPkg Output (third attempt):"
+            echo "$AUTOPKG_OUTPUT"
+        else
+            log "Could not find any executable in extracted files!"
+            exit 1
+        fi
+    fi
+fi
 
 # Use the latest version we got from GitHub API
 DETECTED_VERSION="${LATEST_VERSION}"
 log "Using version: $DETECTED_VERSION"
 
 # Find the created package in the correct location
-CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
 PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
 
 if [ ! -f "$PACKAGE_FILE" ]; then
@@ -70,9 +121,34 @@ if [ ! -f "$PACKAGE_FILE" ]; then
     log "Searching for package in cache directory..."
     PACKAGE_FILE=$(find "$CACHE_DIR" -name "fleetctl_v*.pkg" -type f)
     if [ -z "$PACKAGE_FILE" ]; then
-        log "No package file found! Directory contents:"
-        ls -la "$CACHE_DIR"
-        exit 1
+        # Manual package creation as a last resort
+        log "No package file found. Attempting manual package creation..."
+        
+        # Create a basic package structure
+        PKG_ROOT="$CACHE_DIR/pkg_root"
+        mkdir -p "$PKG_ROOT/usr/local/bin"
+        
+        # Find any fleetctl binary
+        BINARY_PATH=$(find "$CACHE_DIR" -name "fleetctl" -type f | head -n 1)
+        
+        if [ -n "$BINARY_PATH" ]; then
+            cp "$BINARY_PATH" "$PKG_ROOT/usr/local/bin/"
+            chmod +x "$PKG_ROOT/usr/local/bin/fleetctl"
+            
+            # Create package
+            PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
+            pkgbuild --root "$PKG_ROOT" --identifier "com.fleetdm.fleetctl" --version "$DETECTED_VERSION" "$PACKAGE_FILE"
+            
+            if [ $? -ne 0 ]; then
+                log "Manual package creation failed!"
+                ls -la "$CACHE_DIR"
+                exit 1
+            fi
+        else
+            log "No fleetctl binary found! Directory contents:"
+            ls -la "$CACHE_DIR"
+            exit 1
+        fi
     fi
     log "Found package at: $PACKAGE_FILE"
 fi
