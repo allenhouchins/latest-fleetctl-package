@@ -36,9 +36,6 @@ jobs:
           else
             echo "new_release=false" >> $GITHUB_OUTPUT
           fi
-  create-package:
-    # Split into two jobs: build unsigned, then sign and release
-
   build-unsigned:
     needs: check-fleet-release
     if: needs.check-fleet-release.outputs.new_release == 'true'
