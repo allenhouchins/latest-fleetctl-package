@@ -1,5 +1,14 @@
 #!/bin/bash
 
+set -euo pipefail
+
+cleanup() {
+    # Ensure tokens and temp files are removed even on failure
+    defaults delete com.github.autopkg GITHUB_TOKEN >/dev/null 2>&1 || true
+    rm -f release.json >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
 # Function to log messages with timestamps
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
@@ -8,6 +17,9 @@ log() {
 # Define the URL and target paths for AutoPkg
 AUTOPKG_URL="https://github.com/autopkg/autopkg/releases/download/v2.7.3/autopkg-2.7.3.pkg"
 DOWNLOAD_PATH="/tmp/autopkg-2.7.3.pkg"
+
+# Prefer ephemeral GITHUB_TOKEN over PAT if both provided
+TOKEN="${GITHUB_TOKEN:-${PACKAGE_AUTOMATION_TOKEN:-}}"
 
 # Download and install AutoPkg
 log "Downloading AutoPkg package..."
@@ -40,12 +52,12 @@ autopkg repo-add jazzace-recipes
 autopkg repo-add https://github.com/allenhouchins/latest-fleetctl-package.git
 
 # Set up GitHub token for AutoPkg
-defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
+defaults write com.github.autopkg GITHUB_TOKEN -string "$TOKEN"
 
 # Get the version directly from GitHub API first
 LATEST_VERSION=$(curl -L \
     -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+    -H "Authorization: Bearer ${TOKEN}" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/fleetdm/fleet/releases/latest" | jq -r '.tag_name' | sed 's/fleet-v//')
 
@@ -53,7 +65,7 @@ log "Latest version from GitHub API: ${LATEST_VERSION}"
 
 # Run the AutoPkg recipe for Fleet with verbose output
 log "Running the AutoPkg recipe to create the Fleet package..."
-AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
+AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
 log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
@@ -92,20 +104,12 @@ SIGNED_PACKAGE_FILE="${PACKAGE_FILE%.pkg}_signed.pkg"
 SIGNING_IDENTITY="${DEVELOPER_ID_INSTALLER}"
 
 log "Preparing to sign package with identity: $SIGNING_IDENTITY"
-log "Using keychain: $SIGNING_KEYCHAIN"
-
 # List the keychain contents to verify our certificate is available
 security find-identity -v -p codesigning
 
 # Sign the package using productsign
 log "Signing package..."
-if [ -n "$SIGNING_KEYCHAIN" ]; then
-    # Sign using the specified keychain
-    productsign --keychain "$SIGNING_KEYCHAIN" --sign "$SIGNING_IDENTITY" "$PACKAGE_FILE" "$SIGNED_PACKAGE_FILE"
-else
-    # Sign using the default keychain
-    productsign --sign "$SIGNING_IDENTITY" "$PACKAGE_FILE" "$SIGNED_PACKAGE_FILE"
-fi
+productsign --sign "$SIGNING_IDENTITY" "$PACKAGE_FILE" "$SIGNED_PACKAGE_FILE"
 
 SIGN_STATUS=$?
 if [ $SIGN_STATUS -ne 0 ]; then
@@ -163,7 +167,7 @@ cat release.json
 # Check if release exists
 EXISTING_RELEASE=$(curl -L \
     -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+    -H "Authorization: Bearer ${TOKEN}" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${RELEASE_TAG}")
 
@@ -175,7 +179,7 @@ if [ "${RELEASE_ID}" = "null" ]; then
     RELEASE_RESPONSE=$(curl -L \
         -X POST \
         -H "Accept: application/vnd.github+json" \
-        -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+        -H "Authorization: Bearer ${TOKEN}" \
         -H "X-GitHub-Api-Version: 2022-11-28" \
         "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases" \
         -d @release.json)
@@ -196,7 +200,7 @@ fi
 # Check for existing assets
 EXISTING_ASSETS=$(curl -L \
     -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+    -H "Authorization: Bearer ${TOKEN}" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets")
 
@@ -208,7 +212,7 @@ if [ ! -z "${EXISTING_ASSET_ID}" ] && [ "${EXISTING_ASSET_ID}" != "null" ]; then
     curl -L \
         -X DELETE \
         -H "Accept: application/vnd.github+json" \
-        -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+        -H "Authorization: Bearer ${TOKEN}" \
         -H "X-GitHub-Api-Version: 2022-11-28" \
         "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/assets/${EXISTING_ASSET_ID}"
 fi
@@ -218,7 +222,7 @@ log "Uploading package to release..."
 UPLOAD_RESPONSE=$(curl -L \
     -X POST \
     -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer ${PACKAGE_AUTOMATION_TOKEN}" \
+    -H "Authorization: Bearer ${TOKEN}" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     -H "Content-Type: application/octet-stream" \
     "https://uploads.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/${RELEASE_ID}/assets?name=${PACKAGE_NAME}" \
@@ -233,6 +237,4 @@ fi
 
 log "Successfully uploaded package to release"
 
-# Clean up
-rm -f release.json
-defaults delete com.github.autopkg GITHUB_TOKEN
+# Clean up handled by trap
