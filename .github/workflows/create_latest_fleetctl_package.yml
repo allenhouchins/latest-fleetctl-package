@@ -4,10 +4,12 @@ on:
     - cron: '0 */6 * * *'  # Run every 6 hours
   workflow_dispatch:        # Allow manual triggers
 permissions:
-  contents: write          # Add explicit permission to write to repo
+  contents: read           # Default minimal; override per job as needed
 jobs:
   check-fleet-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       new_release: ${{ steps.check_release.outputs.new_release }}
       version: ${{ steps.check_release.outputs.version }}
@@ -15,7 +17,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PACKAGE_AUTOMATION_TOKEN }}
           fetch-depth: 0
       - name: Check latest Fleet release
         id: check_release
@@ -36,59 +37,96 @@ jobs:
             echo "new_release=false" >> $GITHUB_OUTPUT
           fi
   create-package:
+    # Split into two jobs: build unsigned, then sign and release
+
+  build-unsigned:
     needs: check-fleet-release
     if: needs.check-fleet-release.outputs.new_release == 'true'
     runs-on: macos-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PACKAGE_AUTOMATION_TOKEN }}
           fetch-depth: 0
-          
-      # Add steps for importing code signing certificates
+
+      - name: Build unsigned Fleet package
+        run: |
+          chmod +x ./.github/scripts/build_fleetctl_package.sh
+          ./.github/scripts/build_fleetctl_package.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PACKAGE_AUTOMATION_TOKEN: ${{ github.token }}
+
+      - name: Upload unsigned package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleetctl-unsigned
+          path: |
+            ${{ github.workspace }}/unsigned_pkg_path.txt
+            $HOME/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl/*.pkg
+          if-no-files-found: error
+
+  sign-and-release:
+    needs: [check-fleet-release, build-unsigned]
+    if: needs.check-fleet-release.outputs.new_release == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download unsigned package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fleetctl-unsigned
+          path: dist
+
       - name: Import Code Signing Certificates
         uses: apple-actions/import-codesign-certs@v2
         with:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
           keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
-      
-      - name: Set code signing identity and keychain
-        id: set-signing-vars
+
+      - name: Sign and release package
         run: |
-          echo "DEVELOPER_ID_INSTALLER=${{ secrets.DEVELOPER_ID_INSTALLER }}" >> $GITHUB_ENV
-          echo "SIGNING_KEYCHAIN=$RUNNER_TEMP/build_keychain.keychain" >> $GITHUB_ENV
-          
-      - name: Create Fleet package
-        run: |
-          chmod +x ./.github/scripts/create_fleetctl_package.sh
-          ./.github/scripts/create_fleetctl_package.sh
+          chmod +x ./.github/scripts/sign_and_release.sh
+          ./.github/scripts/sign_and_release.sh dist
         env:
-          FLEET_VERSION: ${{ needs.check-fleet-release.outputs.version }}
-          PACKAGE_AUTOMATION_TOKEN: ${{ secrets.PACKAGE_AUTOMATION_TOKEN }}
-          REPO_OWNER: ${{ secrets.REPO_OWNER }}
-          REPO_NAME: ${{ secrets.REPO_NAME }}
-          USER_EMAIL: ${{ secrets.USER_EMAIL }}
-          USER_NAME: ${{ secrets.USER_NAME }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PACKAGE_AUTOMATION_TOKEN: ${{ github.token }}
           DEVELOPER_ID_INSTALLER: ${{ secrets.DEVELOPER_ID_INSTALLER }}
-          SIGNING_KEYCHAIN: ${{ env.SIGNING_KEYCHAIN }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-          
+          # Only publish releases when running on main
+          PUBLISH_RELEASE: ${{ github.ref_name == 'main' && 'true' || 'false' }}
+
+      - name: Upload signed package artifact (for testing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleetctl-signed
+          path: dist/*.pkg
+          if-no-files-found: error
+
       - name: Update version file
-        if: success()
+        if: success() && github.ref_name == 'main'
         run: |
           # Ensure we're on the latest version of main
           git fetch origin main
           git reset --hard origin/main
-          
+
           # Update version file
           echo "${{ needs.check-fleet-release.outputs.version }}" > current_fleetctl_version.txt
-          
+
           # Configure git
           git config user.name "${{ secrets.USER_NAME }}"
           git config user.email "${{ secrets.USER_EMAIL }}"
-          
+
           # Commit and push changes
           git add current_fleetctl_version.txt
           git commit -m "Update Fleet version to ${{ needs.check-fleet-release.outputs.version }}"
