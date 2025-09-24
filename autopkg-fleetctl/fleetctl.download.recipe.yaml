@@ -22,6 +22,7 @@ Process:
   - Processor: URLDownloader
     Arguments:
       filename: "%NAME%-%version%.zip"
+      url: "https://github.com/fleetdm/fleet/releases/download/fleet-v%version%/fleetctl_v%version%_macos.zip"
 
   - Processor: EndOfCheckPhase
 
