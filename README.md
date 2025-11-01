@@ -34,8 +34,8 @@ This repository uses GitHub Actions to automatically:
 3. Create a new release with the built package
 
 The automation uses [AutoPkg](https://github.com/autopkg/autopkg) with custom recipes:
-- [`fleetctl.download.recipe`](https://github.com/allenhouchins/fleet-stuff/blob/main/autopkg-fleetctl/fleetctl.download.recipe) - Handles downloading the latest release
-- [`fleetctl.pkg.recipe`](https://github.com/allenhouchins/fleet-stuff/blob/main/autopkg-fleetctl/fleetctl.pkg.recipe) - Generates the installer package
+- [`fleetctl.download.recipe`](https://github.com/allenhouchins/latest-fleetctl-package/blob/main/autopkg-fleetctl/fleetctl.download.recipe.yaml) - Handles downloading the latest release
+- [`fleetctl.pkg.recipe`](https://github.com/allenhouchins/latest-fleetctl-package/blob/main/autopkg-fleetctl/fleetctl.pkg.recipe.yaml) - Generates the installer package
 
 ## Benefits Over Manual Installation
 

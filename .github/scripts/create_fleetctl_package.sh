@@ -6,8 +6,8 @@ log() {
 }
 
 # Define the URL and target paths for AutoPkg
-AUTOPKG_URL="https://github.com/autopkg/autopkg/releases/download/v2.7.3/autopkg-2.7.3.pkg"
-DOWNLOAD_PATH="/tmp/autopkg-2.7.3.pkg"
+AUTOPKG_URL="https://github.com/autopkg/autopkg/releases/download/v2.7.6/autopkg-2.7.6.pkg"
+DOWNLOAD_PATH="/tmp/autopkg-2.7.6.pkg"
 
 # Download and install AutoPkg
 log "Downloading AutoPkg package..."
@@ -36,7 +36,6 @@ fi
 
 # Add required AutoPkg repos
 log "Adding required AutoPkg repos..."
-autopkg repo-add jazzace-recipes
 autopkg repo-add https://github.com/allenhouchins/latest-fleetctl-package.git
 
 # Set up GitHub token for AutoPkg

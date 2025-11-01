@@ -1,6 +1,6 @@
 Description: Gets the latest version of fleetctl from Github releases, and normalises the version.
 Identifier: com.github.jc0b.download.fleetctl
-MinimumVersion: "2.3"
+MinimumVersion: "2.7.6"
 
 Input:
   NAME: fleetctl
@@ -13,16 +13,16 @@ Process:
       sort_by_highest_tag_names: true
       release_id: "latest"
 
-  - Processor: com.github.jazzace.processors/TextSearcher
+  - Processor: FindAndReplace
     Arguments:
-      re_pattern: \d+\.\d{1,2}\.\d{1,2}
-      text_in: "%version%"
-      result_output_var_name: "version"
+      find: fleet-v
+      input_string: "%version%"
+      replace: ""
+      result_output_var_name: version
 
   - Processor: URLDownloader
     Arguments:
       filename: "%NAME%-%version%.zip"
-      url: "https://github.com/fleetdm/fleet/releases/download/fleet-v%version%/fleetctl_v%version%_macos.zip"
 
   - Processor: EndOfCheckPhase
 
@@ -31,3 +31,8 @@ Process:
       archive_path: "%pathname%"
       destination_path: "%RECIPE_CACHE_DIR%/%NAME%"
       purge_destination: true
+
+  - Processor: CodeSignatureVerifier
+    Arguments:
+      requirement: identifier "com.fleetdm.fleetctl" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = "8VBZ3948LU"
+      input_path: "%RECIPE_CACHE_DIR%/%NAME%/%NAME%_v%version%_macos/fleetctl"
