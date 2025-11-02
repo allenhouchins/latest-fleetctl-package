@@ -36,6 +36,7 @@ fi
 
 # Add required AutoPkg repos
 log "Adding required AutoPkg repos..."
+autopkg repo-add https://github.com/autopkg/jc0b-recipes.git
 autopkg repo-add https://github.com/allenhouchins/latest-fleetctl-package.git
 
 # Set up GitHub token for AutoPkg
@@ -50,10 +51,10 @@ LATEST_VERSION=$(curl -L \
 
 log "Latest version from GitHub API: ${LATEST_VERSION}"
 
-# Run the AutoPkg recipe for Fleet with verbose output
-log "Running the AutoPkg recipe to create the Fleet package..."
-CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
-AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
+# Run the AutoPkg recipe override for Fleet with verbose output
+log "Running the AutoPkg recipe override to create the Fleet package..."
+CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/local.pkg.fleetctl"
+AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv local.pkg.fleetctl)
 log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
@@ -80,7 +81,7 @@ if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
         
         # Try running AutoPkg again
         log "Running AutoPkg recipe again with fixed path..."
-        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
+        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv local.pkg.fleetctl)
         log "AutoPkg Output (second attempt):"
         echo "$AUTOPKG_OUTPUT"
     else
@@ -98,7 +99,7 @@ if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
             
             # Try running AutoPkg again
             log "Running AutoPkg recipe again with fixed path..."
-            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
+            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv local.pkg.fleetctl)
             log "AutoPkg Output (third attempt):"
             echo "$AUTOPKG_OUTPUT"
         else

@@ -1,6 +1,6 @@
-Description: Gets the latest version of fleetctl, and creates an installer pkg.
-Identifier: com.github.jc0b.pkg.fleetctl
-ParentRecipe: com.github.jc0b.download.fleetctl
+Description: Gets the latest version of fleetctl, and creates an installer pkg. Override to maintain custom naming convention.
+Identifier: local.pkg.fleetctl
+ParentRecipe: com.github.jc0b.pkg.fleetctl
 MinimumVersion: "2.7.6"
 
 Input:
@@ -8,7 +8,6 @@ Input:
   PKGID: com.fleetdm.fleetctl
 
 Process:
-
   - Processor: PkgRootCreator
     Arguments:
       pkgdirs:
@@ -30,7 +29,8 @@ Process:
             path: "/usr/local/bin/%NAME%"
             user: "root"
             mode: "0755"
-        pkgname: "%NAME%-v%version%"
+        pkgname: "%NAME%_v%version%"
         version: "%version%"
         id: "%PKGID%"
         pkgdir: "%RECIPE_CACHE_DIR%"
+
