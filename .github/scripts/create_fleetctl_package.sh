@@ -37,7 +37,6 @@ fi
 # Add required AutoPkg repos
 log "Adding required AutoPkg repos..."
 autopkg repo-add https://github.com/autopkg/jc0b-recipes.git
-autopkg repo-add https://github.com/allenhouchins/latest-fleetctl-package.git
 
 # Set up GitHub token for AutoPkg
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"

@@ -12,7 +12,7 @@ Automated package builder for Fleet's command-line tool `fleetctl`. Get the late
 
 ## Installation
 
-1. Download the latest `.pkg` file from the [Releases](../../releases) page
+1. Download the latest `.pkg` file from the [Releases](https://github.com/allenhouchins/latest-fleetctl-package/releases) page
 2. Double-click the downloaded file to launch the installer
 3. Follow the installation prompts
 4. Verify installation by running:
@@ -33,10 +33,10 @@ This repository uses GitHub Actions to automatically:
 2. Generate a new macOS package when updates are detected
 3. Create a new release with the built package
 
-The automation uses [AutoPkg](https://github.com/autopkg/autopkg) with a recipe override that extends [jc0b's excellent recipes](https://github.com/autopkg/jc0b-recipes):
-- The override ([`fleetctl.pkg.recipe.override.yml`](https://github.com/allenhouchins/latest-fleetctl-package/blob/main/autopkg-fleetctl/fleetctl.pkg.recipe.override.yml)) uses `ParentRecipe: com.github.jc0b.pkg.fleetctl` to inherit all functionality from jc0b's recipe
-- Only the package naming convention is customized (`fleetctl_v%version%.pkg` instead of `fleetctl-v%version%`) to match our versioning scheme
-- This approach ensures we automatically receive the latest recipe improvements and updates from jc0b while maintaining our specific packaging requirements
+The automation uses [AutoPkg](https://github.com/autopkg/autopkg) with [jc0b's Fleet recipe](https://github.com/autopkg/jc0b-recipes/tree/master/Fleet):
+- Uses the `fleetctl.pkg` recipe from jc0b-recipes directly to build the package
+- Automatically renames the package from `fleetctl-%version%.pkg` to `fleetctl_v%version%.pkg` to match our versioning scheme
+- This approach ensures we automatically receive the latest recipe improvements and updates from jc0b
 - No manual synchronization needed when jc0b updates his recipes
 
 ## Benefits Over Manual Installation
@@ -58,4 +58,4 @@ Contributions are welcome! Please feel free to submit a Pull Request or open an 
 
 ## Support
 
-If you encounter any issues or have questions, please [open an issue](../../issues/new) in this repository.
+If you encounter any issues or have questions, please [open an issue](https://github.com/allenhouchins/latest-fleetctl-package/issues/new) in this repository.
