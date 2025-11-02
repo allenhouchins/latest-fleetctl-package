@@ -1,13 +1,14 @@
 Description: Gets the latest version of fleetctl, and creates an installer pkg.
 Identifier: com.github.jc0b.pkg.fleetctl
 ParentRecipe: com.github.jc0b.download.fleetctl
-MinimumVersion: "2.3"
+MinimumVersion: "2.7.6"
 
 Input:
   NAME: fleetctl
   PKGID: com.fleetdm.fleetctl
 
 Process:
+
   - Processor: PkgRootCreator
     Arguments:
       pkgdirs:
@@ -15,12 +16,12 @@ Process:
         usr/local: "0755"
         usr/local/bin: "0755"
       pkgroot: "%RECIPE_CACHE_DIR%/pkg_root"
-  
+
   - Processor: Copier
     Arguments:
-      source_path: "%RECIPE_CACHE_DIR%/%NAME%/fleetctl_v%version%_macos_all/fleetctl"
+      source_path: "%RECIPE_CACHE_DIR%/%NAME%/%NAME%_v%version%_macos/fleetctl"
       destination_path: "%RECIPE_CACHE_DIR%/pkg_root/usr/local/bin/fleetctl"
-  
+
   - Processor: PkgCreator
     Arguments:
       pkg_request:
@@ -29,8 +30,7 @@ Process:
             path: "/usr/local/bin/%NAME%"
             user: "root"
             mode: "0755"
-        pkgname: "%NAME%_v%version%"
+        pkgname: "%NAME%-v%version%"
         version: "%version%"
         id: "%PKGID%"
-        options: "purge_ds_store"
         pkgdir: "%RECIPE_CACHE_DIR%"
