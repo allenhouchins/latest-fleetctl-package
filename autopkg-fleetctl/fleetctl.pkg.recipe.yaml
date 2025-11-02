@@ -30,7 +30,7 @@ Process:
             path: "/usr/local/bin/%NAME%"
             user: "root"
             mode: "0755"
-        pkgname: "%NAME%-%version%"
+        pkgname: "%NAME%-v%version%"
         version: "%version%"
         id: "%PKGID%"
         pkgdir: "%RECIPE_CACHE_DIR%"
