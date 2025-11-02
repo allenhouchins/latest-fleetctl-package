@@ -39,13 +39,6 @@ log "Adding required AutoPkg repos..."
 autopkg repo-add https://github.com/autopkg/jc0b-recipes.git
 autopkg repo-add https://github.com/allenhouchins/latest-fleetctl-package.git
 
-# Copy override file to AutoPkg RecipeOverrides directory
-log "Setting up recipe override..."
-RECIPE_OVERRIDES_DIR="$HOME/Library/AutoPkg/RecipeOverrides"
-mkdir -p "$RECIPE_OVERRIDES_DIR"
-cp "./autopkg-fleetctl/fleetctl.pkg.recipe.override.yml" "$RECIPE_OVERRIDES_DIR/"
-log "Copied override file to $RECIPE_OVERRIDES_DIR/"
-
 # Set up GitHub token for AutoPkg
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
 
@@ -58,17 +51,33 @@ LATEST_VERSION=$(curl -L \
 
 log "Latest version from GitHub API: ${LATEST_VERSION}"
 
+# Copy override file to AutoPkg RecipeOverrides directory
+log "Setting up recipe override..."
+RECIPE_OVERRIDES_DIR="$HOME/Library/AutoPkg/RecipeOverrides"
+mkdir -p "$RECIPE_OVERRIDES_DIR"
+OVERRIDE_SOURCE="./autopkg-fleetctl/fleetctl.pkg.recipe.override.yml"
+OVERRIDE_DEST="$RECIPE_OVERRIDES_DIR/fleetctl.pkg.recipe.override.yml"
+
+if [ ! -f "$OVERRIDE_SOURCE" ]; then
+    log "ERROR: Override source file not found at $OVERRIDE_SOURCE"
+    exit 1
+fi
+
+cp "$OVERRIDE_SOURCE" "$OVERRIDE_DEST"
+log "Copied override file from $OVERRIDE_SOURCE to $OVERRIDE_DEST"
+
 # Verify override file is accessible
-if [ ! -f "$RECIPE_OVERRIDES_DIR/fleetctl.pkg.recipe.override.yml" ]; then
-    log "ERROR: Override file not found at $RECIPE_OVERRIDES_DIR/fleetctl.pkg.recipe.override.yml"
+if [ ! -f "$OVERRIDE_DEST" ]; then
+    log "ERROR: Override file not found at $OVERRIDE_DEST"
     exit 1
 fi
 
 # Run the AutoPkg recipe override for Fleet with verbose output
 log "Running the AutoPkg recipe override to create the Fleet package..."
 CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/local.pkg.fleetctl"
+# Use full path to override file to ensure AutoPkg finds it
 # Use --ignore-parent-trust-verification-errors to avoid interactive prompts
-AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors local.pkg.fleetctl 2>&1)
+AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST" 2>&1)
 log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
@@ -95,7 +104,7 @@ if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
         
         # Try running AutoPkg again
         log "Running AutoPkg recipe again with fixed path..."
-        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors local.pkg.fleetctl 2>&1)
+        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST" 2>&1)
         log "AutoPkg Output (second attempt):"
         echo "$AUTOPKG_OUTPUT"
     else
@@ -113,7 +122,7 @@ if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
             
             # Try running AutoPkg again
             log "Running AutoPkg recipe again with fixed path..."
-            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors local.pkg.fleetctl 2>&1)
+            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST" 2>&1)
             log "AutoPkg Output (third attempt):"
             echo "$AUTOPKG_OUTPUT"
         else
