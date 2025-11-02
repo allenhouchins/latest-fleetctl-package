@@ -128,12 +128,12 @@ fi
 DETECTED_VERSION="${LATEST_VERSION}"
 log "Using version: $DETECTED_VERSION"
 
-# Find the created package - jc0b's recipe creates fleetctl-v${VERSION}.pkg
+# Find the created package - jc0b's recipe creates fleetctl-${VERSION}.pkg (with hyphen, no 'v')
 log "Searching for package in cache directory..."
-ORIGINAL_PACKAGE=$(find "$CACHE_DIR" -name "fleetctl-v*.pkg" -type f | head -n 1)
+ORIGINAL_PACKAGE=$(find "$CACHE_DIR" -name "fleetctl-*.pkg" -type f | head -n 1)
 
 if [ -z "$ORIGINAL_PACKAGE" ]; then
-    log "Package not found with pattern fleetctl-v*.pkg, trying broader search..."
+    log "Package not found with pattern fleetctl-*.pkg, trying broader search..."
     ORIGINAL_PACKAGE=$(find "$CACHE_DIR" -name "fleetctl*.pkg" -type f | head -n 1)
 fi
 
@@ -166,7 +166,9 @@ if [ -z "$ORIGINAL_PACKAGE" ]; then
             ls -la "$CACHE_DIR"
             exit 1
         fi
-    fi
+fi
+
+if [ -n "$ORIGINAL_PACKAGE" ]; then
     log "Found original package at: $ORIGINAL_PACKAGE"
 fi
 
