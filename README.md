@@ -33,9 +33,11 @@ This repository uses GitHub Actions to automatically:
 2. Generate a new macOS package when updates are detected
 3. Create a new release with the built package
 
-The automation uses [AutoPkg](https://github.com/autopkg/autopkg) with custom recipes:
-- [`fleetctl.download.recipe`](https://github.com/allenhouchins/latest-fleetctl-package/blob/main/autopkg-fleetctl/fleetctl.download.recipe.yaml) - Handles downloading the latest release
-- [`fleetctl.pkg.recipe`](https://github.com/allenhouchins/latest-fleetctl-package/blob/main/autopkg-fleetctl/fleetctl.pkg.recipe.yaml) - Generates the installer package
+The automation uses [AutoPkg](https://github.com/autopkg/autopkg) with a recipe override that extends [jc0b's excellent recipes](https://github.com/autopkg/jc0b-recipes):
+- The override ([`fleetctl.pkg.recipe.override.yml`](https://github.com/allenhouchins/latest-fleetctl-package/blob/main/autopkg-fleetctl/fleetctl.pkg.recipe.override.yml)) uses `ParentRecipe: com.github.jc0b.pkg.fleetctl` to inherit all functionality from jc0b's recipe
+- Only the package naming convention is customized (`fleetctl_v%version%.pkg` instead of `fleetctl-v%version%`) to match our versioning scheme
+- This approach ensures we automatically receive the latest recipe improvements and updates from jc0b while maintaining our specific packaging requirements
+- No manual synchronization needed when jc0b updates his recipes
 
 ## Benefits Over Manual Installation
 
