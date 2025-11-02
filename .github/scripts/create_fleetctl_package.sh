@@ -51,63 +51,25 @@ LATEST_VERSION=$(curl -L \
 
 log "Latest version from GitHub API: ${LATEST_VERSION}"
 
-# Copy override file to AutoPkg RecipeOverrides directory
-log "Setting up recipe override..."
-RECIPE_OVERRIDES_DIR="$HOME/Library/AutoPkg/RecipeOverrides"
-mkdir -p "$RECIPE_OVERRIDES_DIR"
-OVERRIDE_SOURCE="./autopkg-fleetctl/fleetctl.pkg.recipe.override.yml"
-OVERRIDE_DEST="$RECIPE_OVERRIDES_DIR/fleetctl.pkg.recipe.override.yml"
-
-log "Checking for override source at: $OVERRIDE_SOURCE"
-if [ ! -f "$OVERRIDE_SOURCE" ]; then
-    log "ERROR: Override source file not found at $OVERRIDE_SOURCE"
-    log "Current directory: $(pwd)"
-    log "Listing autopkg-fleetctl directory:"
-    ls -la ./autopkg-fleetctl/ || log "Directory does not exist"
-    exit 1
-fi
-
-log "Copying override file..."
-cp "$OVERRIDE_SOURCE" "$OVERRIDE_DEST"
-log "Copied override file from $OVERRIDE_SOURCE to $OVERRIDE_DEST"
-
-# Verify override file is accessible
-if [ ! -f "$OVERRIDE_DEST" ]; then
-    log "ERROR: Override file not found at $OVERRIDE_DEST"
-    exit 1
-fi
-
-# Get absolute path for override file
-OVERRIDE_DEST_ABS=$(cd "$(dirname "$OVERRIDE_DEST")" && pwd)/$(basename "$OVERRIDE_DEST")
-log "Absolute path to override: $OVERRIDE_DEST_ABS"
-
-# Verify parent recipe exists (jc0b's recipe)
+# Run the parent recipe directly from jc0b-recipes
+# We'll rename the package afterward to match our naming convention
 log "Verifying parent recipe exists..."
-if autopkg list-recipes 2>&1 | grep -q "com.github.jc0b.pkg.fleetctl"; then
-    log "Parent recipe found: com.github.jc0b.pkg.fleetctl"
-else
-    log "WARNING: Parent recipe not found in list-recipes"
-    log "Available recipes:"
-    autopkg list-recipes 2>&1 | head -20 || true
+if ! autopkg list-recipes 2>&1 | grep -q "fleetctl.pkg"; then
+    log "ERROR: Parent recipe fleetctl.pkg not found in list-recipes"
+    log "Available fleetctl recipes:"
+    autopkg list-recipes 2>&1 | grep -i fleetctl || log "No fleetctl recipes found"
+    exit 1
 fi
+log "Parent recipe found: fleetctl.pkg (com.github.jc0b.pkg.fleetctl)"
 
-# Verify AutoPkg can find our override recipe
-log "Verifying AutoPkg can find override recipe..."
-if autopkg list-recipes 2>&1 | grep -q "local.pkg.fleetctl"; then
-    log "Override recipe found: local.pkg.fleetctl"
-else
-    log "WARNING: Override recipe not found in list-recipes, but file exists at: $OVERRIDE_DEST_ABS"
-    log "AutoPkg might need the recipe in RecipeOverrides to be indexed"
-fi
-
-# Run the AutoPkg recipe override for Fleet with verbose output
-log "Running the AutoPkg recipe override to create the Fleet package..."
-CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/local.pkg.fleetctl"
-# Use absolute path to override file - this should work more reliably
+# Run the AutoPkg recipe from jc0b-recipes
+# This creates fleetctl-v${VERSION}.pkg - we'll rename it afterward
+log "Running the AutoPkg recipe to create the Fleet package..."
+CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
 # Use --ignore-parent-trust-verification-errors to avoid interactive prompts
 # Redirect stdin from /dev/null to prevent any interactive prompts
-log "Executing: autopkg run -vv --ignore-parent-trust-verification-errors $OVERRIDE_DEST_ABS"
-AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST_ABS" </dev/null 2>&1)
+log "Executing: autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg"
+AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg </dev/null 2>&1)
 log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
@@ -134,7 +96,7 @@ if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
         
         # Try running AutoPkg again
         log "Running AutoPkg recipe again with fixed path..."
-        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST_ABS" </dev/null 2>&1)
+        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg </dev/null 2>&1)
         log "AutoPkg Output (second attempt):"
         echo "$AUTOPKG_OUTPUT"
     else
@@ -152,7 +114,7 @@ if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
             
             # Try running AutoPkg again
             log "Running AutoPkg recipe again with fixed path..."
-            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST_ABS" </dev/null 2>&1)
+            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg </dev/null 2>&1)
             log "AutoPkg Output (third attempt):"
             echo "$AUTOPKG_OUTPUT"
         else
@@ -166,14 +128,16 @@ fi
 DETECTED_VERSION="${LATEST_VERSION}"
 log "Using version: $DETECTED_VERSION"
 
-# Find the created package in the correct location
-PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
+# Find the created package - jc0b's recipe creates fleetctl-v${VERSION}.pkg
+log "Searching for package in cache directory..."
+ORIGINAL_PACKAGE=$(find "$CACHE_DIR" -name "fleetctl-v*.pkg" -type f | head -n 1)
 
-if [ ! -f "$PACKAGE_FILE" ]; then
-    log "Package not found at: $PACKAGE_FILE"
-    log "Searching for package in cache directory..."
-    PACKAGE_FILE=$(find "$CACHE_DIR" -name "fleetctl_v*.pkg" -type f)
-    if [ -z "$PACKAGE_FILE" ]; then
+if [ -z "$ORIGINAL_PACKAGE" ]; then
+    log "Package not found with pattern fleetctl-v*.pkg, trying broader search..."
+    ORIGINAL_PACKAGE=$(find "$CACHE_DIR" -name "fleetctl*.pkg" -type f | head -n 1)
+fi
+
+if [ -z "$ORIGINAL_PACKAGE" ]; then
         # Manual package creation as a last resort
         log "No package file found. Attempting manual package creation..."
         
@@ -188,9 +152,9 @@ if [ ! -f "$PACKAGE_FILE" ]; then
             cp "$BINARY_PATH" "$PKG_ROOT/usr/local/bin/"
             chmod +x "$PKG_ROOT/usr/local/bin/fleetctl"
             
-            # Create package
-            PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
-            pkgbuild --root "$PKG_ROOT" --identifier "com.fleetdm.fleetctl" --version "$DETECTED_VERSION" "$PACKAGE_FILE"
+            # Create package with correct naming
+            ORIGINAL_PACKAGE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
+            pkgbuild --root "$PKG_ROOT" --identifier "com.fleetdm.fleetctl" --version "$DETECTED_VERSION" "$ORIGINAL_PACKAGE"
             
             if [ $? -ne 0 ]; then
                 log "Manual package creation failed!"
@@ -203,10 +167,22 @@ if [ ! -f "$PACKAGE_FILE" ]; then
             exit 1
         fi
     fi
-    log "Found package at: $PACKAGE_FILE"
+    log "Found original package at: $ORIGINAL_PACKAGE"
 fi
 
-log "Found package at: $PACKAGE_FILE"
+# Rename package to match our naming convention (fleetctl_v${VERSION}.pkg instead of fleetctl-v${VERSION}.pkg)
+TARGET_PACKAGE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
+if [ "$ORIGINAL_PACKAGE" != "$TARGET_PACKAGE" ]; then
+    log "Renaming package from $(basename "$ORIGINAL_PACKAGE") to $(basename "$TARGET_PACKAGE")"
+    mv "$ORIGINAL_PACKAGE" "$TARGET_PACKAGE"
+    if [ $? -ne 0 ]; then
+        log "ERROR: Failed to rename package"
+        exit 1
+    fi
+fi
+
+PACKAGE_FILE="$TARGET_PACKAGE"
+log "Final package at: $PACKAGE_FILE"
 
 # Calculate package checksum
 PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
