@@ -58,11 +58,16 @@ mkdir -p "$RECIPE_OVERRIDES_DIR"
 OVERRIDE_SOURCE="./autopkg-fleetctl/fleetctl.pkg.recipe.override.yml"
 OVERRIDE_DEST="$RECIPE_OVERRIDES_DIR/fleetctl.pkg.recipe.override.yml"
 
+log "Checking for override source at: $OVERRIDE_SOURCE"
 if [ ! -f "$OVERRIDE_SOURCE" ]; then
     log "ERROR: Override source file not found at $OVERRIDE_SOURCE"
+    log "Current directory: $(pwd)"
+    log "Listing autopkg-fleetctl directory:"
+    ls -la ./autopkg-fleetctl/ || log "Directory does not exist"
     exit 1
 fi
 
+log "Copying override file..."
 cp "$OVERRIDE_SOURCE" "$OVERRIDE_DEST"
 log "Copied override file from $OVERRIDE_SOURCE to $OVERRIDE_DEST"
 
@@ -72,12 +77,37 @@ if [ ! -f "$OVERRIDE_DEST" ]; then
     exit 1
 fi
 
+# Get absolute path for override file
+OVERRIDE_DEST_ABS=$(cd "$(dirname "$OVERRIDE_DEST")" && pwd)/$(basename "$OVERRIDE_DEST")
+log "Absolute path to override: $OVERRIDE_DEST_ABS"
+
+# Verify parent recipe exists (jc0b's recipe)
+log "Verifying parent recipe exists..."
+if autopkg list-recipes 2>&1 | grep -q "com.github.jc0b.pkg.fleetctl"; then
+    log "Parent recipe found: com.github.jc0b.pkg.fleetctl"
+else
+    log "WARNING: Parent recipe not found in list-recipes"
+    log "Available recipes:"
+    autopkg list-recipes 2>&1 | head -20 || true
+fi
+
+# Verify AutoPkg can find our override recipe
+log "Verifying AutoPkg can find override recipe..."
+if autopkg list-recipes 2>&1 | grep -q "local.pkg.fleetctl"; then
+    log "Override recipe found: local.pkg.fleetctl"
+else
+    log "WARNING: Override recipe not found in list-recipes, but file exists at: $OVERRIDE_DEST_ABS"
+    log "AutoPkg might need the recipe in RecipeOverrides to be indexed"
+fi
+
 # Run the AutoPkg recipe override for Fleet with verbose output
 log "Running the AutoPkg recipe override to create the Fleet package..."
 CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/local.pkg.fleetctl"
-# Use full path to override file to ensure AutoPkg finds it
+# Use absolute path to override file - this should work more reliably
 # Use --ignore-parent-trust-verification-errors to avoid interactive prompts
-AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST" 2>&1)
+# Redirect stdin from /dev/null to prevent any interactive prompts
+log "Executing: autopkg run -vv --ignore-parent-trust-verification-errors $OVERRIDE_DEST_ABS"
+AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST_ABS" </dev/null 2>&1)
 log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
 
@@ -104,7 +134,7 @@ if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
         
         # Try running AutoPkg again
         log "Running AutoPkg recipe again with fixed path..."
-        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST" 2>&1)
+        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST_ABS" </dev/null 2>&1)
         log "AutoPkg Output (second attempt):"
         echo "$AUTOPKG_OUTPUT"
     else
@@ -122,7 +152,7 @@ if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
             
             # Try running AutoPkg again
             log "Running AutoPkg recipe again with fixed path..."
-            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST" 2>&1)
+            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors "$OVERRIDE_DEST_ABS" </dev/null 2>&1)
             log "AutoPkg Output (third attempt):"
             echo "$AUTOPKG_OUTPUT"
         else
