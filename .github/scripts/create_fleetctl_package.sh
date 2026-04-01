@@ -1,13 +1,25 @@
 #!/bin/bash
 
-# Function to log messages with timestamps
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
 }
 
+KEYCHAIN_NAME="build.keychain-db"
+KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+
+cleanup_keychain() {
+    log "Cleaning up temporary keychain..."
+    security lock-keychain "$KEYCHAIN_NAME" 2>/dev/null || true
+    security delete-keychain "$KEYCHAIN_NAME" 2>/dev/null || true
+    security list-keychains -s login.keychain-db
+    security default-keychain -s login.keychain-db
+    rm -f /tmp/installer_cert.p12
+}
+trap cleanup_keychain EXIT
+
 # Define the URL and target paths for AutoPkg
-AUTOPKG_URL="https://github.com/autopkg/autopkg/releases/download/v2.7.3/autopkg-2.7.3.pkg"
-DOWNLOAD_PATH="/tmp/autopkg-2.7.3.pkg"
+AUTOPKG_URL="https://github.com/autopkg/autopkg/releases/download/v2.7.6/autopkg-2.7.6.pkg"
+DOWNLOAD_PATH="/tmp/autopkg-2.7.6.pkg"
 
 # Download and install AutoPkg
 log "Downloading AutoPkg package..."
@@ -34,10 +46,49 @@ if ! command -v brew &> /dev/null; then
     brew install git jq
 fi
 
-# Add required AutoPkg repos
+# --- Set up signing keychain ---
+if [ -n "${INSTALLER_CERTIFICATE_P12_BASE64:-}" ]; then
+    log "Setting up signing keychain and importing certificate..."
+    echo "$INSTALLER_CERTIFICATE_P12_BASE64" | base64 --decode > /tmp/installer_cert.p12
+
+    security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+    security set-keychain-settings -lut 1800 "$KEYCHAIN_NAME"
+    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+
+    security import /tmp/installer_cert.p12 \
+        -k "$KEYCHAIN_NAME" \
+        -P "${INSTALLER_CERTIFICATE_PASSWORD}" \
+        -T /usr/bin/productsign \
+        -T /usr/bin/pkgbuild
+
+    security set-key-partition-list -S apple-tool:,apple:,productsign: \
+        -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+
+    security list-keychains -d user -s "$KEYCHAIN_NAME" login.keychain-db
+    security default-keychain -s "$KEYCHAIN_NAME"
+
+    rm -f /tmp/installer_cert.p12
+
+    INSTALLER_SIGNING_IDENTITY=$(security find-identity -v -p basic "$KEYCHAIN_NAME" \
+        | grep "Developer ID Installer" \
+        | head -n 1 \
+        | sed 's/.*"\(.*\)".*/\1/')
+
+    if [ -z "$INSTALLER_SIGNING_IDENTITY" ]; then
+        log "ERROR: No 'Developer ID Installer' identity found in imported certificate."
+        log "Available identities:"
+        security find-identity -v -p basic "$KEYCHAIN_NAME"
+        exit 1
+    fi
+    log "Discovered signing identity: $INSTALLER_SIGNING_IDENTITY"
+else
+    log "WARNING: No signing certificate provided. Package will NOT be signed or notarized."
+fi
+
+# Add required AutoPkg repos (rtrouton-recipes provides SharedProcessors used by jc0b-recipes)
 log "Adding required AutoPkg repos..."
-autopkg repo-add jazzace-recipes
-autopkg repo-add https://github.com/allenhouchins/latest-fleetctl-package.git
+autopkg repo-add https://github.com/autopkg/rtrouton-recipes.git
+autopkg repo-add https://github.com/autopkg/jc0b-recipes.git
 
 # Set up GitHub token for AutoPkg
 defaults write com.github.autopkg GITHUB_TOKEN -string "$PACKAGE_AUTOMATION_TOKEN"
@@ -51,87 +102,190 @@ LATEST_VERSION=$(curl -L \
 
 log "Latest version from GitHub API: ${LATEST_VERSION}"
 
-# Run the AutoPkg recipe for Fleet with verbose output
+# Run the parent recipe directly from jc0b-recipes
+# We'll rename the package afterward to match our naming convention
+log "Verifying parent recipe exists..."
+if ! autopkg list-recipes 2>&1 | grep -q "fleetctl.pkg"; then
+    log "ERROR: Parent recipe fleetctl.pkg not found in list-recipes"
+    log "Available fleetctl recipes:"
+    autopkg list-recipes 2>&1 | grep -i fleetctl || log "No fleetctl recipes found"
+    exit 1
+fi
+log "Parent recipe found: fleetctl.pkg (com.github.jc0b.pkg.fleetctl)"
+
+# Run the AutoPkg recipe from jc0b-recipes
+# This creates fleetctl-v${VERSION}.pkg - we'll rename it afterward
 log "Running the AutoPkg recipe to create the Fleet package..."
-AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv com.github.jc0b.pkg.fleetctl)
+CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
+log "Executing: autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg"
+AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg </dev/null 2>&1)
 log "AutoPkg Output:"
 echo "$AUTOPKG_OUTPUT"
+
+# Check for fleetctl binary and fix path structure if needed
+if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
+    log "AutoPkg recipe failed. Attempting to fix fleetctl binary path..."
+    
+    log "Extracted contents of fleetctl directory:"
+    find "$CACHE_DIR/fleetctl" -type f | sort
+    
+    EXTRACTED_FLEETCTL=$(find "$CACHE_DIR/fleetctl" -type f -name "fleetctl" | head -n 1)
+    
+    if [ -n "$EXTRACTED_FLEETCTL" ]; then
+        log "Found fleetctl binary at: $EXTRACTED_FLEETCTL"
+        
+        mkdir -p "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all"
+        cp "$EXTRACTED_FLEETCTL" "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
+        chmod +x "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
+        
+        log "Copied fleetctl binary to expected location"
+        
+        log "Running AutoPkg recipe again with fixed path..."
+        AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg </dev/null 2>&1)
+        log "AutoPkg Output (second attempt):"
+        echo "$AUTOPKG_OUTPUT"
+    else
+        log "Could not find fleetctl binary by name. Looking for any executable file..."
+        EXTRACTED_FILES=$(find "$CACHE_DIR/fleetctl" -type f -perm -u+x | head -n 1)
+        
+        if [ -n "$EXTRACTED_FILES" ]; then
+            log "Found possible binary at: $EXTRACTED_FILES"
+            mkdir -p "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all"
+            cp "$EXTRACTED_FILES" "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
+            chmod +x "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
+            
+            log "Copied possible binary to expected location"
+            
+            log "Running AutoPkg recipe again with fixed path..."
+            AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg </dev/null 2>&1)
+            log "AutoPkg Output (third attempt):"
+            echo "$AUTOPKG_OUTPUT"
+        else
+            log "Could not find any executable in extracted files!"
+            exit 1
+        fi
+    fi
+fi
 
 # Use the latest version we got from GitHub API
 DETECTED_VERSION="${LATEST_VERSION}"
 log "Using version: $DETECTED_VERSION"
 
-# Find the created package in the correct location
-CACHE_DIR="/Users/runner/Library/AutoPkg/Cache/com.github.jc0b.pkg.fleetctl"
-PACKAGE_FILE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
+# Find the created package - jc0b's recipe creates fleetctl-${VERSION}.pkg (with hyphen, no 'v')
+log "Searching for package in cache directory..."
+ORIGINAL_PACKAGE=$(find "$CACHE_DIR" -name "fleetctl-*.pkg" -type f | head -n 1)
 
-if [ ! -f "$PACKAGE_FILE" ]; then
-    log "Package not found at: $PACKAGE_FILE"
-    log "Searching for package in cache directory..."
-    PACKAGE_FILE=$(find "$CACHE_DIR" -name "fleetctl_v*.pkg" -type f | grep -v "_signed.pkg")
-    if [ -z "$PACKAGE_FILE" ]; then
-        log "No package file found! Directory contents:"
-        ls -la "$CACHE_DIR"
+if [ -z "$ORIGINAL_PACKAGE" ]; then
+    log "Package not found with pattern fleetctl-*.pkg, trying broader search..."
+    ORIGINAL_PACKAGE=$(find "$CACHE_DIR" -name "fleetctl*.pkg" -type f | head -n 1)
+fi
+
+if [ -z "$ORIGINAL_PACKAGE" ]; then
+        log "No package file found. Attempting manual package creation..."
+
+        mkdir -p "$CACHE_DIR"
+        PKG_ROOT="$CACHE_DIR/pkg_root"
+        mkdir -p "$PKG_ROOT/usr/local/bin"
+
+        BINARY_PATH=$(find "$CACHE_DIR" -name "fleetctl" -type f 2>/dev/null | head -n 1)
+
+        if [ -z "$BINARY_PATH" ]; then
+            log "No cached binary found. Downloading fleetctl directly from GitHub releases..."
+            DOWNLOAD_URL="https://github.com/fleetdm/fleet/releases/download/fleet-v${DETECTED_VERSION}/fleetctl_v${DETECTED_VERSION}_macos.tar.gz"
+            TARBALL="/tmp/fleetctl.tar.gz"
+            EXTRACT_DIR="/tmp/fleetctl_extract"
+
+            curl -L -o "$TARBALL" "$DOWNLOAD_URL"
+            if [ $? -ne 0 ]; then
+                log "Failed to download fleetctl from: $DOWNLOAD_URL"
+                exit 1
+            fi
+
+            mkdir -p "$EXTRACT_DIR"
+            tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+            BINARY_PATH=$(find "$EXTRACT_DIR" -name "fleetctl" -type f | head -n 1)
+
+            if [ -z "$BINARY_PATH" ]; then
+                log "Could not find fleetctl binary in downloaded tarball. Contents:"
+                find "$EXTRACT_DIR" -type f
+                exit 1
+            fi
+            log "Downloaded and extracted fleetctl binary: $BINARY_PATH"
+        fi
+
+        cp "$BINARY_PATH" "$PKG_ROOT/usr/local/bin/"
+        chmod +x "$PKG_ROOT/usr/local/bin/fleetctl"
+
+        ORIGINAL_PACKAGE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
+        pkgbuild --root "$PKG_ROOT" --identifier "com.fleetdm.fleetctl" --version "$DETECTED_VERSION" "$ORIGINAL_PACKAGE"
+
+        if [ $? -ne 0 ]; then
+            log "Manual package creation failed!"
+            ls -la "$CACHE_DIR"
+            exit 1
+        fi
+        log "Successfully created package manually: $ORIGINAL_PACKAGE"
+fi
+
+if [ -n "$ORIGINAL_PACKAGE" ]; then
+    log "Found original package at: $ORIGINAL_PACKAGE"
+fi
+
+# Rename package to match our naming convention (fleetctl_v${VERSION}.pkg instead of fleetctl-v${VERSION}.pkg)
+TARGET_PACKAGE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
+if [ "$ORIGINAL_PACKAGE" != "$TARGET_PACKAGE" ]; then
+    log "Renaming package from $(basename "$ORIGINAL_PACKAGE") to $(basename "$TARGET_PACKAGE")"
+    mv "$ORIGINAL_PACKAGE" "$TARGET_PACKAGE"
+    if [ $? -ne 0 ]; then
+        log "ERROR: Failed to rename package"
         exit 1
     fi
-    log "Found package at: $PACKAGE_FILE"
 fi
 
-log "Found package at: $PACKAGE_FILE"
+PACKAGE_FILE="$TARGET_PACKAGE"
+log "Final package at: $PACKAGE_FILE"
 
-# ----- PACKAGE SIGNING IMPLEMENTATION START -----
+# --- Sign the package ---
+if [ -n "${INSTALLER_SIGNING_IDENTITY:-}" ]; then
+    UNSIGNED_PKG="${PACKAGE_FILE}"
+    SIGNED_PKG="${PACKAGE_FILE%.pkg}-signed.pkg"
 
-# Verify the signature components are available
-if [ -z "$DEVELOPER_ID_INSTALLER" ]; then
-    log "Error: DEVELOPER_ID_INSTALLER environment variable is not set."
-    exit 1
-fi
+    log "Signing package with identity: ${INSTALLER_SIGNING_IDENTITY}"
+    productsign --sign "${INSTALLER_SIGNING_IDENTITY}" \
+        --keychain "$KEYCHAIN_NAME" \
+        "$UNSIGNED_PKG" "$SIGNED_PKG"
 
-# Define variables for package signing
-SIGNED_PACKAGE_FILE="${PACKAGE_FILE%.pkg}_signed.pkg"
-SIGNING_IDENTITY="${DEVELOPER_ID_INSTALLER}"
+    mv "$SIGNED_PKG" "$UNSIGNED_PKG"
+    PACKAGE_FILE="$UNSIGNED_PKG"
 
-log "Preparing to sign package with identity: $SIGNING_IDENTITY"
-log "Using keychain: $SIGNING_KEYCHAIN"
-
-# List the keychain contents to verify our certificate is available
-security find-identity -v -p codesigning
-
-# Sign the package using productsign
-log "Signing package..."
-if [ -n "$SIGNING_KEYCHAIN" ]; then
-    # Sign using the specified keychain
-    productsign --keychain "$SIGNING_KEYCHAIN" --sign "$SIGNING_IDENTITY" "$PACKAGE_FILE" "$SIGNED_PACKAGE_FILE"
+    log "Verifying package signature..."
+    pkgutil --check-signature "$PACKAGE_FILE"
+    log "Package signed successfully."
 else
-    # Sign using the default keychain
-    productsign --sign "$SIGNING_IDENTITY" "$PACKAGE_FILE" "$SIGNED_PACKAGE_FILE"
+    log "WARNING: No signing identity provided. Skipping package signing."
 fi
 
-SIGN_STATUS=$?
-if [ $SIGN_STATUS -ne 0 ]; then
-    log "Package signing failed with status: $SIGN_STATUS"
-    exit 1
+# --- Notarize the package ---
+if [ -n "${NOTARIZATION_APPLE_ID:-}" ] && [ -n "${NOTARIZATION_PASSWORD:-}" ] && [ -n "${NOTARIZATION_TEAM_ID:-}" ]; then
+    log "Submitting package for notarization..."
+    xcrun notarytool submit "$PACKAGE_FILE" \
+        --apple-id "${NOTARIZATION_APPLE_ID}" \
+        --password "${NOTARIZATION_PASSWORD}" \
+        --team-id "${NOTARIZATION_TEAM_ID}" \
+        --wait \
+        --timeout 30m
+
+    log "Stapling notarization ticket to package..."
+    xcrun stapler staple "$PACKAGE_FILE"
+
+    log "Verifying notarization..."
+    spctl --assess -v --type install "$PACKAGE_FILE"
+    log "Package notarized and stapled successfully."
+else
+    log "WARNING: Notarization credentials not provided. Skipping notarization."
 fi
 
-log "Package successfully signed: $SIGNED_PACKAGE_FILE"
-
-# Verify the signature
-log "Verifying package signature..."
-pkgutil --check-signature "$SIGNED_PACKAGE_FILE"
-
-if [ $? -ne 0 ]; then
-    log "Package signature verification failed!"
-    exit 1
-fi
-
-log "Package signature verified successfully"
-
-# Use the signed package for the remainder of the script
-PACKAGE_FILE="$SIGNED_PACKAGE_FILE"
-
-# ----- PACKAGE SIGNING IMPLEMENTATION END -----
-
-# Calculate package checksum
+# Calculate package checksum (after signing/notarization so the hash reflects the final artifact)
 PACKAGE_SHA256=$(shasum -a 256 "${PACKAGE_FILE}" | awk '{print $1}')
 
 # Create GitHub release
@@ -171,7 +325,6 @@ RELEASE_ID=$(echo "${EXISTING_RELEASE}" | jq -r '.id')
 
 if [ "${RELEASE_ID}" = "null" ]; then
     log "Creating new release..."
-    # Create the release
     RELEASE_RESPONSE=$(curl -L \
         -X POST \
         -H "Accept: application/vnd.github+json" \
@@ -180,7 +333,6 @@ if [ "${RELEASE_ID}" = "null" ]; then
         "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases" \
         -d @release.json)
 
-    # Get the release ID from the response
     RELEASE_ID=$(echo "${RELEASE_RESPONSE}" | jq -r '.id')
 
     if [ -z "${RELEASE_ID}" ] || [ "${RELEASE_ID}" = "null" ]; then

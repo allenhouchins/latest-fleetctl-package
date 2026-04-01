@@ -45,21 +45,7 @@ jobs:
         with:
           token: ${{ secrets.PACKAGE_AUTOMATION_TOKEN }}
           fetch-depth: 0
-          
-      # Add steps for importing code signing certificates
-      - name: Import Code Signing Certificates
-        uses: apple-actions/import-codesign-certs@v2
-        with:
-          p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
-          p12-password: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
-          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
-      
-      - name: Set code signing identity and keychain
-        id: set-signing-vars
-        run: |
-          echo "DEVELOPER_ID_INSTALLER=${{ secrets.DEVELOPER_ID_INSTALLER }}" >> $GITHUB_ENV
-          echo "SIGNING_KEYCHAIN=$RUNNER_TEMP/build_keychain.keychain" >> $GITHUB_ENV
-          
+
       - name: Create Fleet package
         run: |
           chmod +x ./.github/scripts/create_fleetctl_package.sh
@@ -71,10 +57,12 @@ jobs:
           REPO_NAME: ${{ secrets.REPO_NAME }}
           USER_EMAIL: ${{ secrets.USER_EMAIL }}
           USER_NAME: ${{ secrets.USER_NAME }}
-          DEVELOPER_ID_INSTALLER: ${{ secrets.DEVELOPER_ID_INSTALLER }}
-          SIGNING_KEYCHAIN: ${{ env.SIGNING_KEYCHAIN }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-          
+          INSTALLER_CERTIFICATE_P12_BASE64: ${{ secrets.INSTALLER_CERTIFICATE_P12_BASE64 }}
+          INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.INSTALLER_CERTIFICATE_PASSWORD }}
+          NOTARIZATION_APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
+          NOTARIZATION_PASSWORD: ${{ secrets.NOTARIZATION_PASSWORD }}
+          NOTARIZATION_TEAM_ID: ${{ secrets.NOTARIZATION_TEAM_ID }}
+
       - name: Update version file
         if: success()
         run: |
