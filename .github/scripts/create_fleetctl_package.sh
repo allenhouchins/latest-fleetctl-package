@@ -125,21 +125,21 @@ echo "$AUTOPKG_OUTPUT"
 # Check for fleetctl binary and fix path structure if needed
 if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
     log "AutoPkg recipe failed. Attempting to fix fleetctl binary path..."
-    
+
     log "Extracted contents of fleetctl directory:"
     find "$CACHE_DIR/fleetctl" -type f | sort
-    
+
     EXTRACTED_FLEETCTL=$(find "$CACHE_DIR/fleetctl" -type f -name "fleetctl" | head -n 1)
-    
+
     if [ -n "$EXTRACTED_FLEETCTL" ]; then
         log "Found fleetctl binary at: $EXTRACTED_FLEETCTL"
-        
+
         mkdir -p "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all"
         cp "$EXTRACTED_FLEETCTL" "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
         chmod +x "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
-        
+
         log "Copied fleetctl binary to expected location"
-        
+
         log "Running AutoPkg recipe again with fixed path..."
         AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg </dev/null 2>&1)
         log "AutoPkg Output (second attempt):"
@@ -147,15 +147,15 @@ if [[ "$AUTOPKG_OUTPUT" == *"Error processing path"* ]]; then
     else
         log "Could not find fleetctl binary by name. Looking for any executable file..."
         EXTRACTED_FILES=$(find "$CACHE_DIR/fleetctl" -type f -perm -u+x | head -n 1)
-        
+
         if [ -n "$EXTRACTED_FILES" ]; then
             log "Found possible binary at: $EXTRACTED_FILES"
             mkdir -p "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all"
             cp "$EXTRACTED_FILES" "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
             chmod +x "$CACHE_DIR/fleetctl/fleetctl_v${LATEST_VERSION}_macos_all/fleetctl"
-            
+
             log "Copied possible binary to expected location"
-            
+
             log "Running AutoPkg recipe again with fixed path..."
             AUTOPKG_OUTPUT=$(GITHUB_TOKEN="$PACKAGE_AUTOMATION_TOKEN" autopkg run -vv --ignore-parent-trust-verification-errors fleetctl.pkg </dev/null 2>&1)
             log "AutoPkg Output (third attempt):"
