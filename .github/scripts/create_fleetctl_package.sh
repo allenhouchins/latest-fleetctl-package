@@ -34,8 +34,9 @@ if ! command -v brew &> /dev/null; then
     brew install git jq
 fi
 
-# Add required AutoPkg repos
+# Add required AutoPkg repos (rtrouton-recipes provides SharedProcessors used by jc0b-recipes)
 log "Adding required AutoPkg repos..."
+autopkg repo-add https://github.com/autopkg/rtrouton-recipes.git
 autopkg repo-add https://github.com/autopkg/jc0b-recipes.git
 
 # Set up GitHub token for AutoPkg
@@ -137,34 +138,51 @@ if [ -z "$ORIGINAL_PACKAGE" ]; then
 fi
 
 if [ -z "$ORIGINAL_PACKAGE" ]; then
-        # Manual package creation as a last resort
         log "No package file found. Attempting manual package creation..."
-        
-        # Create a basic package structure
+
+        mkdir -p "$CACHE_DIR"
         PKG_ROOT="$CACHE_DIR/pkg_root"
         mkdir -p "$PKG_ROOT/usr/local/bin"
-        
-        # Find any fleetctl binary
-        BINARY_PATH=$(find "$CACHE_DIR" -name "fleetctl" -type f | head -n 1)
-        
-        if [ -n "$BINARY_PATH" ]; then
-            cp "$BINARY_PATH" "$PKG_ROOT/usr/local/bin/"
-            chmod +x "$PKG_ROOT/usr/local/bin/fleetctl"
-            
-            # Create package with correct naming
-            ORIGINAL_PACKAGE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
-            pkgbuild --root "$PKG_ROOT" --identifier "com.fleetdm.fleetctl" --version "$DETECTED_VERSION" "$ORIGINAL_PACKAGE"
-            
+
+        # First try to find a binary already downloaded by AutoPkg
+        BINARY_PATH=$(find "$CACHE_DIR" -name "fleetctl" -type f 2>/dev/null | head -n 1)
+
+        if [ -z "$BINARY_PATH" ]; then
+            log "No cached binary found. Downloading fleetctl directly from GitHub releases..."
+            DOWNLOAD_URL="https://github.com/fleetdm/fleet/releases/download/fleet-v${DETECTED_VERSION}/fleetctl_v${DETECTED_VERSION}_macos.tar.gz"
+            TARBALL="/tmp/fleetctl.tar.gz"
+            EXTRACT_DIR="/tmp/fleetctl_extract"
+
+            curl -L -o "$TARBALL" "$DOWNLOAD_URL"
             if [ $? -ne 0 ]; then
-                log "Manual package creation failed!"
-                ls -la "$CACHE_DIR"
+                log "Failed to download fleetctl from: $DOWNLOAD_URL"
                 exit 1
             fi
-        else
-            log "No fleetctl binary found! Directory contents:"
+
+            mkdir -p "$EXTRACT_DIR"
+            tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+            BINARY_PATH=$(find "$EXTRACT_DIR" -name "fleetctl" -type f | head -n 1)
+
+            if [ -z "$BINARY_PATH" ]; then
+                log "Could not find fleetctl binary in downloaded tarball. Contents:"
+                find "$EXTRACT_DIR" -type f
+                exit 1
+            fi
+            log "Downloaded and extracted fleetctl binary: $BINARY_PATH"
+        fi
+
+        cp "$BINARY_PATH" "$PKG_ROOT/usr/local/bin/"
+        chmod +x "$PKG_ROOT/usr/local/bin/fleetctl"
+
+        ORIGINAL_PACKAGE="$CACHE_DIR/fleetctl_v${DETECTED_VERSION}.pkg"
+        pkgbuild --root "$PKG_ROOT" --identifier "com.fleetdm.fleetctl" --version "$DETECTED_VERSION" "$ORIGINAL_PACKAGE"
+
+        if [ $? -ne 0 ]; then
+            log "Manual package creation failed!"
             ls -la "$CACHE_DIR"
             exit 1
         fi
+        log "Successfully created package manually: $ORIGINAL_PACKAGE"
 fi
 
 if [ -n "$ORIGINAL_PACKAGE" ]; then
