@@ -257,11 +257,20 @@ if [ -n "${INSTALLER_SIGNING_IDENTITY:-}" ]; then
         --keychain "$KEYCHAIN_NAME" \
         "$UNSIGNED_PKG" "$SIGNED_PKG"
 
+    if [ $? -ne 0 ]; then
+        log "ERROR: productsign failed!"
+        exit 1
+    fi
+
     mv "$SIGNED_PKG" "$UNSIGNED_PKG"
     PACKAGE_FILE="$UNSIGNED_PKG"
 
     log "Verifying package signature..."
     pkgutil --check-signature "$PACKAGE_FILE"
+    if [ $? -ne 0 ]; then
+        log "ERROR: Package signature verification failed!"
+        exit 1
+    fi
     log "Package signed successfully."
 else
     log "WARNING: No signing identity provided. Skipping package signing."
@@ -277,8 +286,19 @@ if [ -n "${NOTARIZATION_APPLE_ID:-}" ] && [ -n "${NOTARIZATION_PASSWORD:-}" ] &&
         --wait \
         --timeout 30m
 
+    if [ $? -ne 0 ]; then
+        log "ERROR: Notarization failed! Check credentials and try again."
+        log "Ensure NOTARIZATION_PASSWORD is an app-specific password, not your Apple account password."
+        log "Generate one at https://account.apple.com > Sign-In and Security > App-Specific Passwords"
+        exit 1
+    fi
+
     log "Stapling notarization ticket to package..."
     xcrun stapler staple "$PACKAGE_FILE"
+    if [ $? -ne 0 ]; then
+        log "ERROR: Stapling failed!"
+        exit 1
+    fi
 
     log "Verifying notarization..."
     spctl --assess -v --type install "$PACKAGE_FILE"
