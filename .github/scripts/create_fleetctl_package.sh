@@ -85,9 +85,11 @@ else
     log "WARNING: No signing certificate provided. Package will NOT be signed or notarized."
 fi
 
-# Add required AutoPkg repos (rtrouton-recipes provides SharedProcessors used by jc0b-recipes)
+# Add required AutoPkg repos
+# jc0b-recipes depends on shared processors from both rtrouton-recipes and jazzace-recipes
 log "Adding required AutoPkg repos..."
 autopkg repo-add https://github.com/autopkg/rtrouton-recipes.git
+autopkg repo-add https://github.com/autopkg/jazzace-recipes.git
 autopkg repo-add https://github.com/autopkg/jc0b-recipes.git
 
 # Set up GitHub token for AutoPkg
