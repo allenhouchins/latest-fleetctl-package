@@ -1,3 +1,6 @@
+** This repo has been archived since the functionality has been built-in here: https://fleetdm.com/download **
+
+
 # latest-fleetctl-package
 
 Automated package builder for Fleet's command-line tool `fleetctl`. Get the latest version of `fleetctl` in `.pkg` format without managing dependencies or $PATH configurations.
